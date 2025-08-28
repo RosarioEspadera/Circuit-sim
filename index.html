@@ -208,7 +208,7 @@ function solveLinear(A,z){
 // ----------------------------
 document.querySelectorAll('.palette .item').forEach(it=>{ it.addEventListener('dragstart', e=>{e.dataTransfer.setData('text/plain', it.dataset.type)})});
 svg.addEventListener('dragover', e=> e.preventDefault());
-svg.addEventListener('drop', e=>{ e.preventDefault(); const type=e.dataTransfer.getData('text/plain'); const pt=svgPoint(e.clientX,e.clientY); addComponent(type,snap(pt.x),snap(pt.y); });
+svg.addEventListener('drop', e=>{ e.preventDefault(); const type=e.dataTransfer.getData('text/plain'); const pt=svgPoint(e.clientX,e.clientY); addComponent(type,snap(pt.x),snap(pt.y)); });
 
 document.getElementById('applyValue').addEventListener('click', ()=>{ if(!state.selection) return; const c=state.components.find(x=>x.id===state.selection.id); if(c){c.value=parseFloat(document.getElementById('selValue').value)||c.value; render();}});
 document.getElementById('deleteSel').addEventListener('click', ()=>{ if(!state.selection) return; state.components=state.components.filter(c=>c.id!==state.selection.id); render();});
