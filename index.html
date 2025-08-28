@@ -1,0 +1,431 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Browser Circuit Simulator (Mini LTSpice-like)</title>
+  <style>
+    :root{--bg:#0f1724;--panel:#0b1220;--accent:#10b981;--muted:#94a3b8;--card:#0b1220}
+    html,body{height:100%;margin:0;font-family:Inter,Segoe UI,Arial;background:linear-gradient(180deg,#071022 0%, #071826 100%);color:#e6eef8}
+    .app{display:grid;grid-template-columns:260px 1fr 340px;grid-template-rows:56px 1fr;gap:12px;height:100vh;padding:12px;box-sizing:border-box}
+    header{grid-column:1/-1;background:rgba(255,255,255,0.02);border-radius:10px;padding:8px 14px;display:flex;align-items:center;gap:12px}
+    header h1{font-size:16px;margin:0}
+    .panel{background:rgba(255,255,255,0.02);border-radius:10px;padding:12px;box-shadow:0 6px 18px rgba(2,6,23,0.7)}
+    .left.panel{overflow:auto}
+    .tool{display:flex;flex-direction:column;gap:8px}
+    .palette .item{background:rgba(255,255,255,0.02);padding:8px;border-radius:8px;cursor:grab;display:flex;align-items:center;gap:8px}
+    .canvas-wrap{position:relative;border-radius:10px;overflow:hidden}
+    #canvas{width:100%;height:calc(100vh - 140px);background:linear-gradient(90deg, rgba(255,255,255,0.01), transparent);display:block}
+    .right.panel{display:flex;flex-direction:column;gap:10px}
+    .props{display:flex;flex-direction:column;gap:8px}
+    .props label{font-size:12px;color:var(--muted)}
+    .props input, .props select{padding:6px;border-radius:6px;border:1px solid rgba(255,255,255,0.04);background:transparent;color:inherit}
+    .bottom{display:flex;gap:8px;margin-top:8px}
+    button{background:transparent;border:1px solid rgba(255,255,255,0.06);padding:8px 10px;border-radius:8px;color:inherit;cursor:pointer}
+    .net-label{font-size:12px;font-weight:600;padding:2px 6px;border-radius:6px;background:rgba(16,185,129,0.15);color:var(--accent);border:1px solid rgba(16,185,129,0.2)}
+    .wire{stroke:#9fb6ff;stroke-width:4;stroke-linecap:round}
+    .node-hint{fill:transparent;stroke:rgba(255,255,255,0.02);stroke-width:18}
+    .component text{font-size:12px;fill:#dfefff}
+    .component rect{fill:rgba(255,255,255,0.02);stroke:rgba(255,255,255,0.04);rx:6}
+    .context{position:fixed;background:#071022;border:1px solid rgba(255,255,255,0.04);padding:6px;border-radius:6px;display:none}
+    .msg{font-size:13px;color:var(--muted)}
+    .toolbar-row{display:flex;gap:8px}
+    .search{padding:6px;border-radius:8px;border:1px solid rgba(255,255,255,0.03);background:transparent}
+    .log{background:rgba(255,255,255,0.01);padding:8px;border-radius:8px;max-height:120px;overflow:auto;font-size:13px}
+    .footer-actions{display:flex;gap:8px;align-items:center}
+    .file-input{display:none}
+    a.link{color:var(--accent);text-decoration:none}
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header class="panel">
+      <h1>CircuitLab — browser circuit simulator (mini)</h1>
+      <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
+        <button id="runSim">Run DC Sim</button>
+        <button id="exportNetlist">Export Netlist</button>
+        <button id="saveBtn">Save</button>
+        <button id="loadBtn">Load</button>
+        <input id="fileIn" class="file-input" type="file" accept="application/json">
+      </div>
+    </header>
+
+    <aside class="left panel">
+      <div class="tool">
+        <div class="palette">
+          <div class="item" draggable="true" data-type="wire">🔗 Wire</div>
+          <div class="item" draggable="true" data-type="resistor">Ω Resistor</div>
+          <div class="item" draggable="true" data-type="vsource">🔋 V Source
+          </div>
+          <div class="item" draggable="true" data-type="ground">⏚ Ground</div>
+          <div class="item" draggable="true" data-type="probe">🖱 Probe</div>
+        </div>
+
+        <div style="margin-top:8px">
+          <div class="msg">Tip: drag a part onto the canvas. Click two endpoints to connect wires. Double-click component to edit value. Right-click for actions.</div>
+        </div>
+
+        <div style="margin-top:12px">
+          <strong>Saved Circuits</strong>
+          <div id="savedList" style="margin-top:8px"></div>
+        </div>
+      </div>
+    </aside>
+
+    <main class="canvas-wrap panel">
+      <svg id="canvas" viewBox="0 0 1600 900" xmlns="http://www.w3.org/2000/svg"></svg>
+      <div id="context" class="context"></div>
+    </main>
+
+    <aside class="right panel">
+      <div class="props">
+        <label>Selected:</label>
+        <div id="selName">(none)</div>
+        <label>Value (ohm / V):</label>
+        <input id="selValue" />
+        <div style="display:flex;gap:8px">
+          <button id="applyValue">Apply</button>
+          <button id="deleteSel">Delete</button>
+        </div>
+      </div>
+
+      <div>
+        <strong>Net Voltages</strong>
+        <div id="netList" style="margin-top:8px"></div>
+      </div>
+
+      <div>
+        <strong>Log</strong>
+        <div id="log" class="log"></div>
+      </div>
+    </aside>
+  </div>
+
+<script>
+// Minimal browser circuit simulator
+// Features implemented:
+// - Place components (resistor, voltage source, ground, wire, probe)
+// - Connect endpoints with wires (click-to-connect)
+// - DC solver (modified nodal analysis) for resistors + independent voltage sources
+// - Net labels overlay with computed voltages
+// - Click probe to read voltage
+// - Double-click component to edit value
+// - Right-click context menu: delete
+// - Save/load circuit JSON, export simple SPICE-like netlist
+
+const svg = document.getElementById('canvas');
+const runSimBtn = document.getElementById('runSim');
+const exportNetlistBtn = document.getElementById('exportNetlist');
+const saveBtn = document.getElementById('saveBtn');
+const loadBtn = document.getElementById('loadBtn');
+const fileIn = document.getElementById('fileIn');
+const selName = document.getElementById('selName');
+const selValue = document.getElementById('selValue');
+const applyValue = document.getElementById('applyValue');
+const deleteSel = document.getElementById('deleteSel');
+const netList = document.getElementById('netList');
+const logEl = document.getElementById('log');
+const context = document.getElementById('context');
+
+let state = {
+  components: [], // {id,type,x,y,rotation,value,points:[{x,y}],a,b}
+  wires: [], // {id,points:[{x,y}],aEndpoint, bEndpoint}
+  nextId: 1,
+  selection: null,
+  wiringStart: null,
+};
+
+function log(msg){
+  const d = document.createElement('div'); d.textContent = msg; logEl.prepend(d);
+}
+
+// Utility
+function uid(){return (state.nextId++).toString()}
+function snap(v){return Math.round(v/8)*8}
+
+// Palette drag
+document.querySelectorAll('.palette .item').forEach(it=>{
+  it.addEventListener('dragstart', e=>{e.dataTransfer.setData('text/plain', it.dataset.type)})
+})
+svg.addEventListener('dragover', e=> e.preventDefault())
+svg.addEventListener('drop', e=>{
+  e.preventDefault();
+  const type = e.dataTransfer.getData('text/plain');
+  const pt = svgPoint(e.clientX, e.clientY);
+  addComponent(type, snap(pt.x), snap(pt.y));
+})
+
+function svgPoint(clientX,clientY){
+  const pt = svg.createSVGPoint(); pt.x = clientX; pt.y = clientY;
+  return pt.matrixTransform(svg.getScreenCTM().inverse());
+}
+
+// Add components
+function addComponent(type,x,y){
+  const id = uid();
+  const comp = {id,type,x,y,rotation:0,value:type==='resistor'?1000:(type==='vsource'?5:0),points:[],a:null,b:null};
+  if(type==='ground') comp.value=0;
+  if(type==='wire'){
+    comp.points=[{x,y},{x+80,y}];
+    state.wires.push(comp);
+  } else {
+    comp.points=[{x-20,y},{x+20,y}];
+    state.components.push(comp);
+  }
+  render();
+}
+
+// Render
+function render(){
+  svg.innerHTML='';
+  // grid
+  const g = document.createElementNS('http://www.w3.org/2000/svg','g');
+  for(let x=0;x<1600;x+=32){ const l=document.createElementNS('http://www.w3.org/2000/svg','line'); l.setAttribute('x1',x);l.setAttribute('x2',x);l.setAttribute('y1',0);l.setAttribute('y2',900);l.setAttribute('stroke','rgba(255,255,255,0.01)'); g.appendChild(l)}
+  svg.appendChild(g);
+
+  // wires
+  state.wires.forEach(w=>{
+    const path = document.createElementNS('http://www.w3.org/2000/svg','path');
+    path.setAttribute('d',`M ${w.points[0].x} ${w.points[0].y} L ${w.points[1].x} ${w.points[1].y}`);
+    path.setAttribute('class','wire');
+    path.dataset.id = w.id;
+    path.addEventListener('click', e=>{e.stopPropagation(); select(w.id,'wire');})
+    svg.appendChild(path);
+  })
+
+  // components
+  state.components.forEach(c=>{
+    const g = document.createElementNS('http://www.w3.org/2000/svg','g');
+    g.setAttribute('class','component'); g.dataset.id=c.id; g.setAttribute('transform',`translate(${c.x},${c.y})`)
+    // body
+    const rect = document.createElementNS('http://www.w3.org/2000/svg','rect'); rect.setAttribute('x',-36);rect.setAttribute('y',-18);rect.setAttribute('width',72);rect.setAttribute('height',36);g.appendChild(rect);
+    // symbol text
+    const t = document.createElementNS('http://www.w3.org/2000/svg','text'); t.setAttribute('x',0);t.setAttribute('y',4);t.setAttribute('text-anchor','middle');
+    if(c.type==='resistor') t.textContent = `R ${c.value}Ω`;
+    else if(c.type==='vsource') t.textContent = `V ${c.value}V`;
+    else if(c.type==='ground') t.textContent = `GND`;
+    else t.textContent = c.type;
+    g.appendChild(t);
+    // leads
+    const l1 = document.createElementNS('http://www.w3.org/2000/svg','line'); l1.setAttribute('x1',-40);l1.setAttribute('y1',0);l1.setAttribute('x2',-22);l1.setAttribute('y2',0);l1.setAttribute('stroke','#a8c0ff');l1.setAttribute('stroke-width',3);g.appendChild(l1);
+    const l2 = document.createElementNS('http://www.w3.org/2000/svg','line'); l2.setAttribute('x1',22);l2.setAttribute('y1',0);l2.setAttribute('x2',40);l2.setAttribute('y2',0);l2.setAttribute('stroke','#a8c0ff');l2.setAttribute('stroke-width',3);g.appendChild(l2);
+
+    g.addEventListener('mousedown', e=>{e.stopPropagation(); select(c.id,'component');});
+    g.addEventListener('dblclick', e=>{ e.stopPropagation(); editComponent(c.id); });
+    g.addEventListener('contextmenu', e=>{ e.preventDefault(); showContext(e.clientX,e.clientY,c.id); })
+    svg.appendChild(g);
+  })
+
+  // net labels
+  computeAndShowNets();
+}
+
+function select(id,kind){
+  state.selection = {id,kind};
+  selName.textContent = kind+': '+id;
+  const comp = state.components.find(c=>c.id===id);
+  selValue.value = comp?comp.value:'-';
+}
+
+function editComponent(id){
+  const comp = state.components.find(c=>c.id===id);
+  if(!comp) return; const v = prompt('Value (ohm for resistor, V for source):',comp.value); if(v!==null){ comp.value = parseFloat(v)||0; render(); }
+}
+
+function showContext(cx,cy,id){
+  context.style.left = cx+'px'; context.style.top = cy+'px'; context.innerHTML = '';
+  const dlt = document.createElement('div'); dlt.textContent='Delete'; dlt.style.cursor='pointer'; dlt.addEventListener('click', ()=>{ deleteById(id); context.style.display='none'; });
+  context.appendChild(dlt); context.style.display='block';
+}
+window.addEventListener('click',()=>context.style.display='none');
+
+function deleteById(id){
+  state.components = state.components.filter(c=>c.id!==id);
+  state.wires = state.wires.filter(w=>w.id!==id);
+  if(state.selection && state.selection.id===id) state.selection=null;
+  render();
+}
+
+applyValue.addEventListener('click', ()=>{
+  if(!state.selection) return; const id = state.selection.id; const c = state.components.find(x=>x.id===id); if(c){ c.value = parseFloat(selValue.value)||c.value; render(); }
+})
+
+deleteSel.addEventListener('click', ()=>{ if(!state.selection) return; deleteById(state.selection.id); })
+
+// Wires by clicking: click a component to set endpoint
+svg.addEventListener('click', e=>{
+  const pt = svgPoint(e.clientX,e.clientY); // if wiring mode...
+  // if palette wire selected? We'll implement click-to-create wire endpoints
+  if(state.wiringStart){
+    const start = state.wiringStart; const id = uid(); const w = {id,points:[{x:start.x,y:start.y},{x:snap(pt.x),y:snap(pt.y)}]}; state.wires.push(w); state.wiringStart = null; render();
+    return;
+  }
+});
+
+// start endpoint by hitting a component leads
+svg.addEventListener('mousedown', e=>{
+  if(e.button!==0) return; const pt = svgPoint(e.clientX,e.clientY); // detect near component lead
+  const nearComp = findCompNear(pt);
+  if(nearComp) { state.wiringStart = {x:nearComp.snapx,y:nearComp.snapy}; log('Wire start at comp '+nearComp.comp.id); }
+})
+
+function findCompNear(pt){
+  for(const c of state.components){
+    const dx = pt.x - c.x; const dy = pt.y - c.y; if(Math.hypot(dx,dy)<28){ // near center -> use right or left based on x
+      const snapx = c.x + (dx>0?28:-28); return {comp:c,snapx,snapy:c.y};
+    }
+  }
+  // near wire endpoint
+  for(const w of state.wires){
+    for(const p of w.points){ if(Math.hypot(pt.x-p.x,pt.y-p.y)<12) return {wire:w,snapx:p.x,snapy:p.y}; }
+  }
+  return null;
+}
+
+// Simple circuit analysis: build nodes via connectivity then MNA for R and V
+function computeAndShowNets(){
+  // Build graph: nodes are unique points (component leads and wire endpoints). Merge nearby points (<12px)
+  const points = [];
+  function addPoint(p, owner, meta){ points.push({x:p.x,y:p.y,owner,meta}); }
+  state.components.forEach(c=>{ addPoint({x:c.x-28,y:c.y},c,'a'); addPoint({x:c.x+28,y:c.y},c,'b'); });
+  state.wires.forEach(w=>{ w.points.forEach(p=>addPoint(p,w,'wire')); });
+  // union-find merge
+  const n = points.length; const parent = Array.from({length:n},(_,i)=>i);
+  function find(i){ return parent[i]===i?i:parent[i]=find(parent[i]); }
+  function union(i,j){ parent[find(i)]=find(j); }
+  for(let i=0;i<n;i++) for(let j=i+1;j<n;j++){ const d = Math.hypot(points[i].x-points[j].x, points[i].y-points[j].y); if(d<14) union(i,j); }
+  // group into nodes
+  const groups = {}; for(let i=0;i<n;i++){ const r=find(i); groups[r]=groups[r]||[]; groups[r].push(points[i]); }
+  // assign node ids
+  const nodeMap = {}; let ni=0; for(const k in groups){ nodeMap[k] = 'N'+(ni++); }
+  // find which node contains ground
+  let groundNode = null;
+  for(const k in groups){ for(const p of groups[k]){ if(p.owner && p.owner.type==='ground') groundNode = nodeMap[k]; } }
+  // Build element list referencing node names
+  const elements = [];
+  // components
+  state.components.forEach(c=>{
+    const aPt = {x:c.x-28,y:c.y}; const bPt = {x:c.x+28,y:c.y};
+    const ai = points.findIndex(p=>Math.hypot(p.x-aPt.x,p.y-aPt.y)<1);
+    const bi = points.findIndex(p=>Math.hypot(p.x-bPt.x,p.y-bPt.y)<1);
+    const aNode = ai>=0?nodeMap[find(ai)]:null; const bNode = bi>=0?nodeMap[find(bi)]:null;
+    elements.push({type:c.type,id:c.id,a:aNode,b:bNode,value:c.value});
+  })
+  // wires join nodes (but already included)
+
+  // Build MNA: map non-ground nodes to indices
+  const nodeNames = new Set(); elements.forEach(el=>{ if(el.a) nodeNames.add(el.a); if(el.b) nodeNames.add(el.b); });
+  if(groundNode) nodeNames.delete(groundNode);
+  const varNodes = Array.from(nodeNames);
+  const nodeIndex = {}; varNodes.forEach((n,i)=>nodeIndex[n]=i);
+
+  // voltage sources need extra vars
+  const vSources = elements.filter(e=>e.type==='vsource');
+  const m = varNodes.length + vSources.length;
+  if(m===0){ showNetLabels(groups,nodeMap,{}); return; }
+  // init matrix A and z
+  function zeros(r,c){ return Array.from({length:r},()=>Array.from({length:c},()=>0)); }
+  const A = zeros(m,m); const z = Array.from({length:m},()=>0);
+
+  // stamp resistors
+  for(const el of elements.filter(e=>e.type==='resistor')){
+    const g = 1/(el.value||1e-12);
+    const an = el.a; const bn = el.b;
+    if(an && nodeIndex.hasOwnProperty(an)) A[nodeIndex[an]][nodeIndex[an]] += g;
+    if(bn && nodeIndex.hasOwnProperty(bn)) A[nodeIndex[bn]][nodeIndex[bn]] += g;
+    if(an && bn){ if(nodeIndex.hasOwnProperty(an) && nodeIndex.hasOwnProperty(bn)){ A[nodeIndex[an]][nodeIndex[bn]] -= g; A[nodeIndex[bn]][nodeIndex[an]] -= g; }
+      // cross terms to ground handled by single diagonal
+    }
+  }
+
+  // stamp voltage sources with MNA
+  for(let k=0;k<vSources.length;k++){
+    const vs = vSources[k]; const vsIndex = varNodes.length + k;
+    const an = vs.a; const bn = vs.b; const val = vs.value;
+    // KCL rows
+    if(an && nodeIndex.hasOwnProperty(an)) A[nodeIndex[an]][vsIndex] += 1;
+    if(bn && nodeIndex.hasOwnProperty(bn)) A[nodeIndex[bn]][vsIndex] -= 1;
+    if(an && nodeIndex.hasOwnProperty(an)) A[vsIndex][nodeIndex[an]] += 1;
+    if(bn && nodeIndex.hasOwnProperty(bn)) A[vsIndex][nodeIndex[bn]] -= 1;
+    z[vsIndex] = val;
+  }
+
+  // account for connections to ground: any node connected to ground gets conductance to ground already via resistor stamping because ground removed from varNodes; no extra stamping needed
+
+  // Solve A x = z via Gaussian elimination
+  let solution = null;
+  try{ solution = solveLinear(A,z); } catch(e){ log('Solve failed: '+e); }
+
+  // Map node voltages
+  const nodeVoltages = {};
+  if(solution){
+    varNodes.forEach((n,i)=> nodeVoltages[n] = solution[i]);
+    // voltage source currents/s of extra vars in solution[varNodes.length+k]
+    // ground node voltage is 0
+    if(groundNode) nodeVoltages[groundNode]=0;
+  }
+
+  showNetLabels(groups,nodeMap,nodeVoltages);
+}
+
+function showNetLabels(groups,nodeMap,voltages){
+  // for each group compute center and show voltage
+  for(const root in groups){
+    const arr = groups[root]; const cx = arr.reduce((s,p)=>s+p.x,0)/arr.length; const cy = arr.reduce((s,p)=>s+p.y,0)/arr.length;
+    const nid = nodeMap[root]; const v = voltages[nid];
+    const g = document.createElementNS('http://www.w3.org/2000/svg','g');
+    const rect = document.createElementNS('http://www.w3.org/2000/svg','rect'); rect.setAttribute('x',cx-34); rect.setAttribute('y',cy-26); rect.setAttribute('width',68); rect.setAttribute('height',20); rect.setAttribute('rx',6); rect.setAttribute('fill','rgba(16,185,129,0.08)'); rect.setAttribute('stroke','rgba(16,185,129,0.18)');
+    const t = document.createElementNS('http://www.w3.org/2000/svg','text'); t.setAttribute('x',cx); t.setAttribute('y',cy-12); t.setAttribute('text-anchor','middle'); t.setAttribute('class','net-label'); t.textContent = (v!==undefined? (Math.round(v*1000)/1000+' V') : nid);
+    g.appendChild(rect); g.appendChild(t); svg.appendChild(g);
+  }
+  // update side panel
+  netList.innerHTML=''; for(const root in groups){ const p = groups[root][0]; const nid = nodeMap[root]; const v = voltages[nid]; const d = document.createElement('div'); d.textContent = `${nid}: ${v!==undefined? (Math.round(v*1000)/1000+' V'): '(uncomputed)'}`; netList.appendChild(d); }
+}
+
+// Linear solver (Gaussian elimination)
+function solveLinear(A,z){
+  const n = A.length; const M = A.map((r,i)=>r.concat([z[i]]));
+  for(let i=0;i<n;i++){
+    // find pivot
+    let maxrow=i; for(let k=i+1;k<n;k++) if(Math.abs(M[k][i])>Math.abs(M[maxrow][i])) maxrow=k;
+    if(Math.abs(M[maxrow][i])<1e-12) throw 'Singular matrix';
+    // swap
+    [M[i],M[maxrow]]=[M[maxrow],M[i]];
+    // normalize
+    const piv=M[i][i]; for(let j=i;j<=n;j++) M[i][j]/=piv;
+    for(let k=0;k<n;k++) if(k!==i){ const factor = M[k][i]; for(let j=i;j<=n;j++) M[k][j]-=factor*M[i][j]; }
+  }
+  return M.map(row=>row[n]);
+}
+
+runSimBtn.addEventListener('click', ()=>{ computeAndShowNets(); log('DC simulation complete'); })
+
+exportNetlistBtn.addEventListener('click', ()=>{ const text = buildNetlist(); downloadText('netlist.spice',text); })
+
+function buildNetlist(){
+  let s='* Exported netlist\n';
+  state.components.forEach(c=>{
+    if(c.type==='resistor') s += `R${c.id} node_${c.x}_${c.y} node_${c.x+1}_${c.y} ${c.value}\n`;
+    if(c.type==='vsource') s += `V${c.id} node_${c.x}_${c.y} node_${c.x+1}_${c.y} DC ${c.value}\n`;
+    if(c.type==='ground') s += `GND node_${c.x}_${c.y} 0\n`;
+  })
+  s += '.end\n'; return s;
+}
+
+function downloadText(filename,txt){ const a=document.createElement('a'); a.href = URL.createObjectURL(new Blob([txt],{type:'text/plain'})); a.download = filename; a.click(); }
+
+saveBtn.addEventListener('click', ()=>{
+  const json = JSON.stringify(state); downloadText('circuit.json',json);
+})
+loadBtn.addEventListener('click', ()=> fileIn.click());
+fileIn.addEventListener('change', e=>{
+  const file = e.target.files[0]; if(!file) return; const reader = new FileReader(); reader.onload = ()=>{ try{ const j = JSON.parse(reader.result); state = Object.assign(state,j); render(); log('Loaded circuit'); }catch(err){ alert('Invalid file'); } }; reader.readAsText(file);
+})
+
+// initial demo
+addComponent('vsource',200,160); addComponent('resistor',360,160); addComponent('ground',520,160);
+
+render();
+</script>
+</body>
+</html>
