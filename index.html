@@ -3,14 +3,10 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Browser Circuit Simulator (Wire Editing)</title>
+<title>Browser Circuit Simulator (Wire + DC Solver)</title>
 <style>
 :root{
-  --bg:#0f1724;
-  --panel:#0b1220;
-  --accent:#10b981;
-  --muted:#94a3b8;
-  --card:#0b1220
+  --bg:#0f1724; --panel:#0b1220; --accent:#10b981; --muted:#94a3b8; --card:#0b1220
 }
 html,body{height:100%;margin:0;font-family:Inter,Segoe UI,Arial;background:linear-gradient(180deg,#071022 0%, #071826 100%);color:#e6eef8}
 .app{display:grid;grid-template-columns:260px 1fr 340px;grid-template-rows:56px 1fr;gap:12px;height:100vh;padding:12px;box-sizing:border-box}
@@ -40,7 +36,7 @@ header h1{font-size:16px;margin:0}
 <body>
 <div class="app">
 <header class="panel">
-<h1>CircuitLab — Wire Editing</h1>
+<h1>CircuitLab — Wire Editing + DC Solver</h1>
 <div class="header-buttons">
 <button id="runSim">Run DC Sim</button>
 <input id="selValue" placeholder="Value" />
@@ -90,7 +86,6 @@ function svgPoint(x,y){
 }
 function logMsg(msg){ const d=document.createElement('div'); d.textContent=msg; document.getElementById('log').prepend(d); }
 
-// Terminal snapping
 function getAllTerminals(){
   const terminals=[];
   state.components.forEach(c=>c.points.forEach(p=>terminals.push({x:p.x,y:p.y})));
@@ -106,21 +101,20 @@ function snapToTerminal(pt){
   return pt;
 }
 
-// Add Component
 function addComponent(type,x,y){
   const id=uid();
-  const comp={id,type,x,y,value:(type==='resistor'?1000:(type==='vsource'?5:0)),points:[{x:x-20,y},{x:x+20,y}]};
+  const comp={id,type,x,y,value:(type==='resistor'?1000:(type==='vsource'?5:0)),points:[{x:x-20,y},{x:x+20,y}]} ;
   if(type==='ground') comp.value=0;
-  if(type==='wire') state.wires.push({id,points:[{x,y},{x:x+80,y}]});
+  if(type==='wire') state.wires.push({id,points:[{x,y},{x:x+80,y}]} );
   else state.components.push(comp);
   render();
 }
 
-// Render
 function render(){
   const svg=document.getElementById('canvas'); while(svg.firstChild) svg.removeChild(svg.firstChild);
   renderWires(); renderComponents(); computeAndShowNets();
 }
+
 function renderWires(){
   const svg=document.getElementById('canvas');
   state.wires.forEach(w=>{
@@ -131,17 +125,13 @@ function renderWires(){
       const c=document.createElementNS('http://www.w3.org/2000/svg','circle');
       c.setAttribute('cx',p.x); c.setAttribute('cy',p.y); c.setAttribute('r',5); c.setAttribute('fill','#10b981'); 
       c.style.cursor='pointer';
-      c.addEventListener('mousedown', e=>{
-        draggingPoint=p; dragWire=w; e.stopPropagation();
-      });
-      c.addEventListener('dblclick', e=>{
-        w.points.splice(i+1,0,{x:(p.x+50),y:p.y});
-        render();
-      });
+      c.addEventListener('mousedown', e=>{ draggingPoint=p; dragWire=w; e.stopPropagation(); });
+      c.addEventListener('dblclick', e=>{ w.points.splice(i+1,0,{x:(p.x+50),y:p.y}); render(); });
       svg.appendChild(c);
     });
   });
 }
+
 function renderComponents(){
   const svg=document.getElementById('canvas');
   state.components.forEach(c=>{
@@ -151,7 +141,11 @@ function renderComponents(){
     rect.setAttribute('x',-36); rect.setAttribute('y',-18); rect.setAttribute('width',72); rect.setAttribute('height',36); rect.setAttribute('rx',6);
     g.appendChild(rect);
     const t=document.createElementNS('http://www.w3.org/2000/svg','text'); t.setAttribute('x',0); t.setAttribute('y',4); t.setAttribute('text-anchor','middle');
-    switch(c.type){case 'resistor': t.textContent=`R ${c.value}Ω`; break; case 'vsource': t.textContent=`V ${c.value}V`; break; case 'ground': t.textContent='GND'; break;}
+    switch(c.type){
+      case 'resistor': t.textContent=`R ${c.value}Ω`; break;
+      case 'vsource': t.textContent=`V ${c.value}V`; break;
+      case 'ground': t.textContent='GND'; break;
+    }
     g.appendChild(t);
     g.addEventListener('mousedown', e=>{ e.stopPropagation(); state.selection={id:c.id,type:c.type}; document.getElementById('selValue').value=c.value; });
     g.addEventListener('dblclick', e=>{ e.stopPropagation(); const v=prompt('Value:',c.value); if(v!==null){c.value=parseFloat(v)||0; render();}});
@@ -182,16 +176,124 @@ svgCanvas.addEventListener('drop', e=>{
   addComponent(type,snap(pt.x),snap(pt.y));
 });
 
-// ---------------- DC Solver (unchanged)
-function computeAndShowNets(){/* existing solver code here, unchanged */}
+// ---------------- DC Solver ----------------
+function computeAndShowNets(){
+  // --- Assign unique nodes to all points ---
+  let pointToNode=new Map(), nodeCount=1;
+  function getNode(p){
+    const key=`${p.x},${p.y}`;
+    if(pointToNode.has(key)) return pointToNode.get(key);
+    const node= p.type==='ground'?0:nodeCount++;
+    pointToNode.set(key,node);
+    return node;
+  }
+
+  // Assign nodes to components
+  state.components.forEach(c=>{
+    c.nodes=c.points.map(p=>{
+      if(c.type==='ground') return 0;
+      return getNode(p);
+    });
+  });
+  state.wires.forEach(w=>{
+    w.nodes=w.points.map(p=>getNode(p));
+    // merge first and last nodes
+    const n0=w.nodes[0], n1=w.nodes[w.nodes.length-1];
+    if(n0!==n1){
+      // map n1 -> n0
+      for(const [k,v] of pointToNode.entries()){ if(v===n1) pointToNode.set(k,n0); }
+    }
+  });
+
+  // Reassign after merging
+  const nodes=[...new Set([...pointToNode.values()])]; // unique nodes
+  const nodeIndex={}; nodes.forEach((n,i)=>nodeIndex[n]=i); // map to index
+  const n=nodes.length;
+  const voltageSources=state.components.filter(c=>c.type==='vsource');
+
+  // Build MNA matrices
+  const A=Array.from({length:n+voltageSources.length},()=>Array(n+voltageSources.length).fill(0));
+  const z=Array(n+voltageSources.length).fill(0);
+
+  // Resistors
+  state.components.filter(c=>c.type==='resistor').forEach(c=>{
+    const n1=nodeIndex[c.nodes[0]], n2=nodeIndex[c.nodes[1]];
+    const g=1/c.value;
+    if(n1!==0) A[n1][n1]+=g;
+    if(n2!==0) A[n2][n2]+=g;
+    if(n1!==0 && n2!==0){ A[n1][n2]-=g; A[n2][n1]-=g; }
+  });
+
+  // Voltage sources (MNA)
+  voltageSources.forEach((vsrc,i)=>{
+    const n1=nodeIndex[vsrc.nodes[0]], n2=nodeIndex[vsrc.nodes[1]];
+    const row=n+i;
+    if(n1!==0){ A[row][n1]=1; A[n1][row]=1; }
+    if(n2!==0){ A[row][n2]=-1; A[n2][row]=-1; }
+    z[row]=vsrc.value;
+  });
+
+  // Solve Ax=z using Gaussian elimination
+  function solve(A,z){
+    const n=A.length;
+    const M=A.map((r,i)=>[...r,z[i]]);
+    for(let i=0;i<n;i++){
+      // pivot
+      let max=i; for(let k=i+1;k<n;k++) if(Math.abs(M[k][i])>Math.abs(M[max][i])) max=k;
+      [M[i],M[max]]=[M[max],M[i]];
+      for(let k=i+1;k<n;k++){
+        const f=M[k][i]/M[i][i];
+        for(let j=i;j<=n;j++) M[k][j]-=f*M[i][j];
+      }
+    }
+    const x=Array(n).fill(0);
+    for(let i=n-1;i>=0;i--){
+      x[i]=M[i][n]/M[i][i];
+      for(let k=i-1;k>=0;k--) M[k][n]-=M[k][i]*x[i];
+    }
+    return x;
+  }
+
+  const solution=solve(A,z);
+  const voltages=solution.slice(0,n);
+  const currents=solution.slice(n);
+
+  // Display node voltages
+  const netList=document.getElementById('netList'); netList.innerHTML='';
+  nodes.forEach((node,i)=>{
+    const d=document.createElement('div'); d.className='net-label';
+    d.textContent=`Node ${node}: ${voltages[i].toFixed(2)} V`;
+    netList.appendChild(d);
+  });
+
+  // Display component currents
+  const currentList=document.getElementById('currentList'); currentList.innerHTML='';
+  state.components.forEach(c=>{
+    if(c.type==='resistor'){
+      const n1=nodeIndex[c.nodes[0]], n2=nodeIndex[c.nodes[1]];
+      const i=(voltages[n1]||0)-(voltages[n2]||0);
+      const curr=i/c.value;
+      const d=document.createElement('div'); d.textContent=`R${c.id} current: ${curr.toFixed(3)} A`;
+      currentList.appendChild(d);
+    }
+  });
+  voltageSources.forEach((vsrc,i)=>{
+    const d=document.createElement('div'); d.textContent=`V${vsrc.id} current: ${currents[i].toFixed(3)} A`;
+    currentList.appendChild(d);
+  });
+}
+
 
 // Buttons
 document.getElementById('applyValue').addEventListener('click', ()=>{
-  if(!state.selection) return; const c=state.components.find(x=>x.id===state.selection.id); 
+  if(!state.selection) return; 
+  const c=state.components.find(x=>x.id===state.selection.id); 
   if(c){c.value=parseFloat(document.getElementById('selValue').value)||c.value; render();}
 });
 document.getElementById('deleteSel').addEventListener('click', ()=>{
-  if(!state.selection) return; state.components=state.components.filter(c=>c.id!==state.selection.id); render();
+  if(!state.selection) return; 
+  state.components=state.components.filter(c=>c.id!==state.selection.id); 
+  render();
 });
 document.getElementById('runSim').addEventListener('click', ()=>{ computeAndShowNets(); logMsg('DC simulation complete'); });
 
