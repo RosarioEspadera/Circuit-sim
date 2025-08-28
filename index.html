@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Browser Circuit Simulator (Wire + DC Solver)</title>
+<title>Browser Circuit Simulator (Wire + DC Solver + Currents)</title>
 <style>
 :root{
   --bg:#0f1724; --panel:#0b1220; --accent:#10b981; --muted:#94a3b8; --card:#0b1220
@@ -25,6 +25,7 @@ header h1{font-size:16px;margin:0}
 .prop-buttons{display:flex;gap:8px;margin-top:4px}
 .net-label{font-size:12px;font-weight:600;padding:2px 6px;border-radius:6px;background:rgba(16,185,129,0.15);color:var(--accent);border:1px solid rgba(16,185,129,0.2)}
 .wire{stroke:#9fb6ff;stroke-width:4;stroke-linecap:round}
+.wire-arrow{stroke:#10b981;stroke-width:2;marker-end:url(#arrowhead);}
 .component text{font-size:12px;fill:#dfefff}
 .component rect{fill:rgba(255,255,255,0.02);stroke:rgba(255,255,255,0.04);rx:6}
 .context{position:fixed;background:#071022;border:1px solid rgba(255,255,255,0.04);padding:6px;border-radius:6px;display:none}
@@ -55,7 +56,13 @@ header h1{font-size:16px;margin:0}
 </aside>
 
 <main class="canvas-wrap panel">
-<svg id="canvas" viewBox="0 0 1600 900" xmlns="http://www.w3.org/2000/svg"></svg>
+<svg id="canvas" viewBox="0 0 1600 900" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#10b981" />
+    </marker>
+  </defs>
+</svg>
 </main>
 
 <aside class="right panel">
@@ -112,6 +119,11 @@ function addComponent(type,x,y){
 
 function render(){
   const svg=document.getElementById('canvas'); while(svg.firstChild) svg.removeChild(svg.firstChild);
+  const defs=document.createElementNS('http://www.w3.org/2000/svg','defs');
+  defs.innerHTML=`<marker id="arrowhead" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+  <polygon points="0 0, 10 3.5, 0 7" fill="#10b981" /></marker>`;
+  svg.appendChild(defs);
+
   renderWires(); renderComponents(); computeAndShowNets();
 }
 
@@ -121,6 +133,7 @@ function renderWires(){
     const path=document.createElementNS('http://www.w3.org/2000/svg','polyline');
     path.setAttribute('points',w.points.map(p=>`${p.x},${p.y}`).join(' '));
     path.setAttribute('class','wire'); svg.appendChild(path);
+    // wire points
     w.points.forEach((p,i)=>{
       const c=document.createElementNS('http://www.w3.org/2000/svg','circle');
       c.setAttribute('cx',p.x); c.setAttribute('cy',p.y); c.setAttribute('r',5); c.setAttribute('fill','#10b981'); 
@@ -176,7 +189,7 @@ svgCanvas.addEventListener('drop', e=>{
   addComponent(type,snap(pt.x),snap(pt.y));
 });
 
-// ---------------- DC Solver ----------------
+// ---------------- DC Solver + Wire Currents ----------------
 function computeAndShowNets(){
   // --- Assign unique nodes to all points ---
   let pointToNode=new Map(), nodeCount=1;
@@ -200,14 +213,13 @@ function computeAndShowNets(){
     // merge first and last nodes
     const n0=w.nodes[0], n1=w.nodes[w.nodes.length-1];
     if(n0!==n1){
-      // map n1 -> n0
       for(const [k,v] of pointToNode.entries()){ if(v===n1) pointToNode.set(k,n0); }
     }
   });
 
   // Reassign after merging
-  const nodes=[...new Set([...pointToNode.values()])]; // unique nodes
-  const nodeIndex={}; nodes.forEach((n,i)=>nodeIndex[n]=i); // map to index
+  const nodes=[...new Set([...pointToNode.values()])];
+  const nodeIndex={}; nodes.forEach((n,i)=>nodeIndex[n]=i);
   const n=nodes.length;
   const voltageSources=state.components.filter(c=>c.type==='vsource');
 
@@ -215,7 +227,6 @@ function computeAndShowNets(){
   const A=Array.from({length:n+voltageSources.length},()=>Array(n+voltageSources.length).fill(0));
   const z=Array(n+voltageSources.length).fill(0);
 
-  // Resistors
   state.components.filter(c=>c.type==='resistor').forEach(c=>{
     const n1=nodeIndex[c.nodes[0]], n2=nodeIndex[c.nodes[1]];
     const g=1/c.value;
@@ -224,7 +235,6 @@ function computeAndShowNets(){
     if(n1!==0 && n2!==0){ A[n1][n2]-=g; A[n2][n1]-=g; }
   });
 
-  // Voltage sources (MNA)
   voltageSources.forEach((vsrc,i)=>{
     const n1=nodeIndex[vsrc.nodes[0]], n2=nodeIndex[vsrc.nodes[1]];
     const row=n+i;
@@ -233,12 +243,11 @@ function computeAndShowNets(){
     z[row]=vsrc.value;
   });
 
-  // Solve Ax=z using Gaussian elimination
+  // Solve Ax=z
   function solve(A,z){
     const n=A.length;
     const M=A.map((r,i)=>[...r,z[i]]);
     for(let i=0;i<n;i++){
-      // pivot
       let max=i; for(let k=i+1;k<n;k++) if(Math.abs(M[k][i])>Math.abs(M[max][i])) max=k;
       [M[i],M[max]]=[M[max],M[i]];
       for(let k=i+1;k<n;k++){
@@ -258,7 +267,7 @@ function computeAndShowNets(){
   const voltages=solution.slice(0,n);
   const currents=solution.slice(n);
 
-  // Display node voltages
+  // Node voltages display
   const netList=document.getElementById('netList'); netList.innerHTML='';
   nodes.forEach((node,i)=>{
     const d=document.createElement('div'); d.className='net-label';
@@ -266,7 +275,7 @@ function computeAndShowNets(){
     netList.appendChild(d);
   });
 
-  // Display component currents
+  // Component currents display
   const currentList=document.getElementById('currentList'); currentList.innerHTML='';
   state.components.forEach(c=>{
     if(c.type==='resistor'){
@@ -281,8 +290,22 @@ function computeAndShowNets(){
     const d=document.createElement('div'); d.textContent=`V${vsrc.id} current: ${currents[i].toFixed(3)} A`;
     currentList.appendChild(d);
   });
-}
 
+  // Draw wire currents
+  const svg=document.getElementById('canvas');
+  state.wires.forEach(w=>{
+    for(let i=0;i<w.points.length-1;i++){
+      const p1=w.points[i], p2=w.points[i+1];
+      const n1=nodeIndex[w.nodes[i]], n2=nodeIndex[w.nodes[i+1]];
+      const I=(voltages[n1]||0)-(voltages[n2]||0);
+      const arrow=document.createElementNS('http://www.w3.org/2000/svg','line');
+      arrow.setAttribute('x1',p1.x); arrow.setAttribute('y1',p1.y);
+      arrow.setAttribute('x2',p2.x); arrow.setAttribute('y2',p2.y);
+      arrow.setAttribute('class','wire-arrow');
+      svg.appendChild(arrow);
+    }
+  });
+}
 
 // Buttons
 document.getElementById('applyValue').addEventListener('click', ()=>{
