@@ -687,42 +687,42 @@ function styleWiresByCurrent(sim){
   const { nodeCurrentSum, rawToIndex, coordToRaw } = sim;
   if(!nodeCurrentSum || !rawToIndex || !coordToRaw) return;
 
-  // find max current for normalization
-  let max = 0;
-  nodeCurrentSum.forEach(v => { if(v > max) max = v; });
-  max = Math.max(max, 1e-12);
+  // find max current magnitude
+  let maxI = 0;
+  nodeCurrentSum.forEach(v=>{
+    if(Math.abs(v) > maxI) maxI = Math.abs(v);
+  });
+  if(maxI < 1e-12) maxI = 1e-12; // avoid divide by zero
 
-  function colorFor(t){
-    const c1=[122,162,255], c2=[16,185,129]; // blue -> green
-    const r = Math.round(c1[0] + (c2[0]-c1[0])*t);
-    const g = Math.round(c1[1] + (c2[1]-c1[1])*t);
-    const b = Math.round(c1[2] + (c2[2]-c1[2])*t);
-    return `rgb(${r},${g},${b})`;
-  }
-
+  // style each wire polyline
   state.wires.forEach(w=>{
-    if(!w.points || w.points.length < 2) return;
     const poly = viewport.querySelector(`polyline[data-id="${w.id}"]`);
     if(!poly) return;
 
-    // measure average node current on its endpoints
-    let sum=0, cnt=0;
+    // estimate current by averaging touching node currents
+    let sum = 0;
     w.points.forEach(p=>{
       const raw = coordToRaw.get(`${p.x},${p.y}`);
       if(raw !== undefined){
         const idx = rawToIndex[raw];
-        if(idx !== undefined){
-          sum += nodeCurrentSum.get(idx) || 0;
-          cnt++;
-        }
+        if(idx !== undefined) sum += Math.abs(nodeCurrentSum.get(idx) || 0);
       }
     });
-    const I = cnt>0 ? sum/cnt : 0;
-    const t = Math.min(1, I/max);
-    poly.setAttribute("stroke-width", (2 + t*6).toFixed(1));
-    poly.setAttribute("stroke", colorFor(t));
+    const avg = sum / Math.max(1, w.points.length);
+    const t = Math.min(1, avg / maxI);
+
+    const minW = 2, maxW = 10;
+    const width = minW + t * (maxW - minW);
+    poly.setAttribute('stroke-width', width);
+
+    // gradient: blue → red with current magnitude
+    const r = Math.round(127 + t * 128);
+    const g = Math.round(180 - t * 180);
+    const b = Math.round(255 - t * 255);
+    poly.setAttribute('stroke', `rgb(${r},${g},${b})`);
   });
 }
+
 
 
 /* =========================
