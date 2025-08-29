@@ -63,7 +63,7 @@ kbd{background:#0b1220;border:1px solid rgba(255,255,255,0.03);padding:2px 6px;b
     <div style="margin-top:8px" class="small">
       Draw wire: click to place corners, double-click to finish.  
       Drag components / wire handles to move. Double-click to edit. Right-click to delete.  
-      Zoom: mouse wheel (clamped 0.25×–4×). Pan: middle-button drag or Space+drag.
+      Zoom: mouse wheel (clamped 0.25×–4×). Pan: middle-button drag or Shift+drag.
     </div>
   </aside>
 
@@ -128,10 +128,7 @@ let tx = 0, ty = 0;
 const MIN_SCALE = 0.25, MAX_SCALE = 4.0;
 
 function applyTransform(){
-  viewport.setAttribute(
-    'transform',
-    `translate(${tx},${ty}) scale(${scale})`
-  );
+  viewport.setAttribute('transform', `translate(${tx},${ty}) scale(${scale})`);
 }
 applyTransform();
 
@@ -139,15 +136,24 @@ function screenToWorld(clientX, clientY){
   const rect = svg.getBoundingClientRect();
   const sx = clientX - rect.left;
   const sy = clientY - rect.top;
+  // world coords within svg units
   return { x: (sx - tx) / scale, y: (sy - ty) / scale };
 }
+function worldToScreenClient(wx, wy){
+  // return client (window) coordinates of a world point
+  const rect = svg.getBoundingClientRect();
+  const sx = wx * scale + tx + rect.left;
+  const sy = wy * scale + ty + rect.top;
+  return { x: sx, y: sy };
+}
 function worldToScreen(wx, wy){
+  // return local svg coordinates (without adding rect offset)
   return { x: wx * scale + tx, y: wy * scale + ty };
 }
 
-// Wheel zoom centered on cursor
+/* === Wheel zoom centered on cursor === */
 svg.addEventListener('wheel', e=>{
-  if(e.ctrlKey) return; // keep browser ctrl+wheel
+  if(e.ctrlKey) return; // allow browser ctrl-wheel default
   e.preventDefault();
 
   const rect = svg.getBoundingClientRect();
@@ -155,20 +161,19 @@ svg.addEventListener('wheel', e=>{
   const localY = e.clientY - rect.top;
   const worldBefore = screenToWorld(e.clientX, e.clientY);
 
-  const factor = Math.exp(-e.deltaY * 0.0012);
+  const factor = Math.exp(-e.deltaY * 0.0012); // smooth
   let newScale = scale * factor;
   newScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, newScale));
 
-  // keep cursor world point fixed
+  // adjust tx,ty so world point under cursor stays put
   tx = localX - worldBefore.x * newScale;
   ty = localY - worldBefore.y * newScale;
-
   scale = newScale;
   applyTransform();
-  render(); // re-render wires/labels
+  render(); // re-render to recompute compensated stroke-widths, handles, fonts
 }, {passive:false});
 
-// Panning: middle-button drag or Shift+left-drag
+/* === Panning: middle-button drag or Shift+left-drag === */
 let panning = false, panStart = null;
 svg.addEventListener('mousedown', e=>{
   if(e.button === 1 || (e.button === 0 && e.shiftKey)){
@@ -185,12 +190,11 @@ function panMove(e){
   ty = panStart.ty + (e.clientY - panStart.y);
   applyTransform();
 }
-function panEnd(){
-  panning = false;
+function panEnd(e){
+  panning = false; panStart = null;
   document.removeEventListener('mousemove', panMove);
   document.removeEventListener('mouseup', panEnd);
 }
-
 
 /* =========================
    Geometry helpers
@@ -235,7 +239,7 @@ function addComponent(type, x, y){
 }
 
 /* =========================
-   Rendering
+   Rendering (with stroke/font/handle compensation)
    ========================= */
 function clearViewport(){
   while(viewport.firstChild) viewport.removeChild(viewport.firstChild);
@@ -243,6 +247,10 @@ function clearViewport(){
 
 function render(){
   clearViewport();
+
+  // compensation factor so strokes/handles/fonts remain constant on screen
+  const invScale = 1 / scale;
+
   // grid (draw in viewport so it scales with zoom)
   if(document.getElementById('gridToggle').checked){
     const viewW = 1600, viewH = 900;
@@ -264,6 +272,8 @@ function render(){
     poly.setAttribute('points', w.points.map(p=>`${p.x},${p.y}`).join(' '));
     poly.setAttribute('class','wire');
     poly.dataset.id = w.id;
+    // set stroke-width compensated (base 4 px)
+    poly.setAttribute('stroke-width', (4 * invScale).toString());
     poly.addEventListener('dblclick', e=>{ e.stopPropagation(); editWireLabel(w); });
     poly.addEventListener('contextmenu', e=>{ e.preventDefault(); e.stopPropagation(); deleteWire(w.id); });
     poly.addEventListener('mousedown', e=>{ e.stopPropagation(); /* selection handled below */ });
@@ -274,14 +284,18 @@ function render(){
       const mid = w.points[Math.floor(w.points.length/2)];
       const t = document.createElementNS('http://www.w3.org/2000/svg','text');
       t.setAttribute('x', mid.x + 6); t.setAttribute('y', mid.y - 6);
-      t.setAttribute('class','wire-label'); t.textContent = w.label;
+      t.setAttribute('class','wire-label');
+      t.setAttribute('font-size', (11 * invScale).toString());
+      t.textContent = w.label;
       viewport.appendChild(t);
     }
 
-    // handles for each point
+    // handles for each point (small circle)
     w.points.forEach((pt, idx)=>{
       const c = document.createElementNS('http://www.w3.org/2000/svg','circle');
-      c.setAttribute('cx', pt.x); c.setAttribute('cy', pt.y); c.setAttribute('r', 5); c.setAttribute('class','handle');
+      c.setAttribute('cx', pt.x); c.setAttribute('cy', pt.y);
+      c.setAttribute('r', (5 * invScale).toString());
+      c.setAttribute('class','handle');
       c.dataset.wid = w.id; c.dataset.idx = idx;
       c.addEventListener('mousedown', e=>{ e.stopPropagation(); startDragPoint(w, idx, e); });
       c.addEventListener('dblclick', e=>{ e.stopPropagation(); snapshot(); w.points.splice(idx+1,0,{x:pt.x+GRID*1.5,y:pt.y}); render(); });
@@ -296,53 +310,74 @@ function render(){
     g.setAttribute('transform', `translate(${c.x},${c.y})`);
     g.dataset.id = c.id;
 
+    // background rect (stroke also compensated)
     const rect = document.createElementNS('http://www.w3.org/2000/svg','rect');
     rect.setAttribute('x', -36); rect.setAttribute('y', -18); rect.setAttribute('width', 72); rect.setAttribute('height', 36); rect.setAttribute('rx',6);
-    rect.setAttribute('fill','rgba(255,255,255,0.02)'); rect.setAttribute('stroke','rgba(255,255,255,0.04)');
+    rect.setAttribute('fill','rgba(255,255,255,0.02)');
+    rect.setAttribute('stroke','rgba(255,255,255,0.04)');
+    rect.setAttribute('stroke-width', (1 * invScale).toString());
     rect.style.cursor = 'move';
     rect.addEventListener('mousedown', e=>{ e.stopPropagation(); startDragComp(c, e); });
     rect.addEventListener('dblclick', e=>{ e.stopPropagation(); editCompValue(c); });
     rect.addEventListener('contextmenu', e=>{ e.preventDefault(); e.stopPropagation(); deleteComp(c.id); });
-
     g.appendChild(rect);
 
-    // symbol and text
+    // symbol and text (with stroke/font compensation)
     if(c.type === 'resistor'){
       const pts=[[-28,0],[-20,-10],[-12,10],[-4,-10],[4,10],[12,-10],[20,0]];
       const poly = document.createElementNS('http://www.w3.org/2000/svg','polyline');
       poly.setAttribute('points', pts.map(p=>p.join(',')).join(' '));
-      poly.setAttribute('stroke','#dfefff'); poly.setAttribute('fill','none'); poly.setAttribute('stroke-width',2);
+      poly.setAttribute('stroke','#dfefff'); poly.setAttribute('fill','none');
+      poly.setAttribute('stroke-width', (2 * invScale).toString());
       g.appendChild(poly);
+
       const txt = document.createElementNS('http://www.w3.org/2000/svg','text');
-      txt.setAttribute('x',0); txt.setAttribute('y',-14); txt.setAttribute('text-anchor','middle'); txt.textContent = `${c.value}Ω`;
+      txt.setAttribute('x',0); txt.setAttribute('y',-14);
+      txt.setAttribute('text-anchor','middle');
+      txt.setAttribute('font-size', (12 * invScale).toString());
+      txt.textContent = `${c.value}Ω`;
       g.appendChild(txt);
     } else if(c.type==='vsource'){
       const txt = document.createElementNS('http://www.w3.org/2000/svg','text');
-      txt.setAttribute('x',0); txt.setAttribute('y',22); txt.setAttribute('text-anchor','middle'); txt.textContent = `${c.value}V`;
+      txt.setAttribute('x',0); txt.setAttribute('y',22); txt.setAttribute('text-anchor','middle');
+      txt.setAttribute('font-size', (12 * invScale).toString());
+      txt.textContent = `${c.value}V`;
       g.appendChild(txt);
-      const l1 = document.createElementNS('http://www.w3.org/2000/svg','line'); l1.setAttribute('x1',-10); l1.setAttribute('y1',-12); l1.setAttribute('x2',-10); l1.setAttribute('y2',12); l1.setAttribute('stroke','#dfefff'); l1.setAttribute('stroke-width',2); g.appendChild(l1);
-      const l2 = document.createElementNS('http://www.w3.org/2000/svg','line'); l2.setAttribute('x1',10); l2.setAttribute('y1',-6); l2.setAttribute('x2',10); l2.setAttribute('y2',6); l2.setAttribute('stroke','#dfefff'); l2.setAttribute('stroke-width',2); g.appendChild(l2);
+
+      const l1 = document.createElementNS('http://www.w3.org/2000/svg','line');
+      l1.setAttribute('x1',-10); l1.setAttribute('y1',-12); l1.setAttribute('x2',-10); l1.setAttribute('y2',12);
+      l1.setAttribute('stroke','#dfefff'); l1.setAttribute('stroke-width', (2 * invScale).toString()); g.appendChild(l1);
+
+      const l2 = document.createElementNS('http://www.w3.org/2000/svg','line');
+      l2.setAttribute('x1',10); l2.setAttribute('y1',-6); l2.setAttribute('x2',10); l2.setAttribute('y2',6);
+      l2.setAttribute('stroke','#dfefff'); l2.setAttribute('stroke-width', (2 * invScale).toString()); g.appendChild(l2);
     } else if(c.type==='ground'){
-      const l1 = document.createElementNS('http://www.w3.org/2000/svg','line'); l1.setAttribute('x1',0); l1.setAttribute('y1',0); l1.setAttribute('x2',0); l1.setAttribute('y2',8); l1.setAttribute('stroke','#dfefff'); g.appendChild(l1);
-      const l2 = document.createElementNS('http://www.w3.org/2000/svg','line'); l2.setAttribute('x1',-8); l2.setAttribute('y1',8); l2.setAttribute('x2',8); l2.setAttribute('y2',8); l2.setAttribute('stroke','#dfefff'); g.appendChild(l2);
-      const l3 = document.createElementNS('http://www.w3.org/2000/svg','line'); l3.setAttribute('x1',-5); l3.setAttribute('y1',10); l3.setAttribute('x2',5); l3.setAttribute('y2',10); l3.setAttribute('stroke','#dfefff'); g.appendChild(l3);
+      const l1 = document.createElementNS('http://www.w3.org/2000/svg','line'); l1.setAttribute('x1',0); l1.setAttribute('y1',0); l1.setAttribute('x2',0); l1.setAttribute('y2',8); l1.setAttribute('stroke','#dfefff'); l1.setAttribute('stroke-width', (1 * invScale).toString()); g.appendChild(l1);
+      const l2 = document.createElementNS('http://www.w3.org/2000/svg','line'); l2.setAttribute('x1',-8); l2.setAttribute('y1',8); l2.setAttribute('x2',8); l2.setAttribute('y2',8); l2.setAttribute('stroke','#dfefff'); l2.setAttribute('stroke-width', (1 * invScale).toString()); g.appendChild(l2);
+      const l3 = document.createElementNS('http://www.w3.org/2000/svg','line'); l3.setAttribute('x1',-5); l3.setAttribute('y1',10); l3.setAttribute('x2',5); l3.setAttribute('y2',10); l3.setAttribute('stroke','#dfefff'); l3.setAttribute('stroke-width', (1 * invScale).toString()); g.appendChild(l3);
     }
 
     viewport.appendChild(g);
 
-    // update and draw terminals dots for snapping & solver
+    // update and draw terminals dots for snapping & solver (dot radius compensated)
     c.points = [{x: c.x - 28, y: c.y}, {x: c.x + 28, y: c.y}];
     c.points.forEach(pt=>{
       const dot = document.createElementNS('http://www.w3.org/2000/svg','circle');
-      dot.setAttribute('cx', pt.x); dot.setAttribute('cy', pt.y); dot.setAttribute('r', 3); dot.setAttribute('fill','#a8d8c2');
+      dot.setAttribute('cx', pt.x); dot.setAttribute('cy', pt.y);
+      dot.setAttribute('r', (3 * invScale).toString());
+      dot.setAttribute('fill','#a8d8c2');
       viewport.appendChild(dot);
     });
   });
 
   // solve and style
   const sim = computeAndShowNets();
-  styleWiresByCurrent(sim);
-  drawNodeLabels(sim);
+
+  // style wires by current (stroke widths must be compensated)
+  styleWiresByCurrent(sim, invScale);
+
+  // draw node labels (font sizes compensated)
+  drawNodeLabels(sim, invScale);
 }
 
 /* =========================
@@ -375,7 +410,6 @@ function startDragPoint(wire, idx, e){
     const gridOn = document.getElementById('gridToggle').checked;
     const snapped = gridOn ? {x: snapCoord(world.x), y: snapCoord(world.y)} : snapToTerminal(world);
     wire.points[idx] = snapped;
-    // optionally collapse colinear points
     render();
   }
   function up(ev){
@@ -407,15 +441,17 @@ function deleteWire(id){ snapshot(); state.wires = state.wires.filter(w=>w.id !=
 svg.addEventListener('mousedown', e=>{
   // ignore if panning (handled elsewhere)
   if(e.button === 1) return;
+
+  // hit test wires (distance in SCREEN pixels converted to world units)
   const world = screenToWorld(e.clientX, e.clientY);
-  // hit test wires (polyline bounding)
   let hitWire = null;
+  // threshold in world units that corresponds to 6 screen pixels
+  const wireHitThresholdWorld = 6 / scale;
   state.wires.forEach(w=>{
     for(let i=0;i<w.points.length-1;i++){
       const a = w.points[i], b = w.points[i+1];
-      // distance from point to segment
       const d = pointSegmentDistance(world, a, b);
-      if(d < 6){ hitWire = w; break; }
+      if(d < wireHitThresholdWorld){ hitWire = w; break; }
     }
   });
   if(hitWire){
@@ -424,11 +460,14 @@ svg.addEventListener('mousedown', e=>{
     document.getElementById('selValue').value = hitWire.label || '';
     return;
   }
-  // hit test components
+
+  // hit test components using SCREEN-space bounding box (so clicks are consistent at any zoom)
   let hitComp = null;
   for(const c of state.components){
-    const dx = world.x - c.x, dy = world.y - c.y;
-    if(Math.abs(dx) <= 36 && Math.abs(dy) <= 18){ hitComp = c; break; }
+    const sc = worldToScreenClient(c.x, c.y);
+    const halfWpx = 36 * scale; // rect half-width in screen pixels = world half-width * scale
+    const halfHpx = 18 * scale;
+    if(Math.abs(e.clientX - sc.x) <= halfWpx && Math.abs(e.clientY - sc.y) <= halfHpx){ hitComp = c; break; }
   }
   if(hitComp){
     state.selection = {id: hitComp.id, type: 'component'};
@@ -441,7 +480,7 @@ svg.addEventListener('mousedown', e=>{
   }
 });
 
-// helper distance point->segment
+// helper distance point->segment (all in world coords)
 function pointSegmentDistance(p, a, b){
   const vx = b.x - a.x, vy = b.y - a.y;
   const wx = p.x - a.x, wy = p.y - a.y;
@@ -475,7 +514,6 @@ document.getElementById('deleteSel').addEventListener('click', ()=>{
   document.getElementById('selValue').value = '';
 });
 
-/* right-click prevention & delete via context on element handled in element listeners */
 svg.addEventListener('contextmenu', e=> e.preventDefault());
 
 /* keyboard shortcuts */
@@ -532,15 +570,20 @@ svg.addEventListener('dblclick', e=>{
 function drawPreview(){
   // overlay preview polyline in viewport
   if(!preview.active) return;
+  const invScale = 1 / scale;
   const poly = document.createElementNS('http://www.w3.org/2000/svg','polyline');
   poly.setAttribute('points', preview.points.map(p=>`${p.x},${p.y}`).join(' '));
   poly.setAttribute('class','wire');
-  poly.setAttribute('stroke','#7fb2ff'); poly.setAttribute('stroke-width','3'); poly.setAttribute('stroke-dasharray','6 4');
+  poly.setAttribute('stroke','#7fb2ff');
+  poly.setAttribute('stroke-width', (3 * invScale).toString());
+  poly.setAttribute('stroke-dasharray','6 4');
   viewport.appendChild(poly);
   // draw small handles
   preview.points.forEach(pt=>{
     const c = document.createElementNS('http://www.w3.org/2000/svg','circle');
-    c.setAttribute('cx', pt.x); c.setAttribute('cy', pt.y); c.setAttribute('r', 3); c.setAttribute('fill','#6ee7b7');
+    c.setAttribute('cx', pt.x); c.setAttribute('cy', pt.y);
+    c.setAttribute('r', (3 * invScale).toString());
+    c.setAttribute('fill','#6ee7b7');
     viewport.appendChild(c);
   });
 }
@@ -687,25 +730,23 @@ function updateNodeList(nodeV, uniqRaw){
 
 /* =========================
    Styling wires by current (no arrows)
+   - Accepts invScale to compensate stroke width
    ========================= */
-function styleWiresByCurrent(sim){
+function styleWiresByCurrent(sim, invScale = 1){
   if(!sim) return;
   const { nodeCurrentSum, rawToIndex, coordToRaw } = sim;
   if(!nodeCurrentSum || !rawToIndex || !coordToRaw) return;
 
   // find max current magnitude
   let maxI = 0;
-  nodeCurrentSum.forEach(v=>{
-    if(Math.abs(v) > maxI) maxI = Math.abs(v);
-  });
+  nodeCurrentSum.forEach(v=>{ if(Math.abs(v) > maxI) maxI = Math.abs(v); });
   if(maxI < 1e-12) maxI = 1e-12; // avoid divide by zero
 
   // style each wire polyline
   state.wires.forEach(w=>{
     const poly = viewport.querySelector(`polyline[data-id="${w.id}"]`);
     if(!poly) return;
-
-    // estimate current by averaging touching node currents
+    // estimate current magnitude by averaging touching node currents
     let sum = 0;
     w.points.forEach(p=>{
       const raw = coordToRaw.get(`${p.x},${p.y}`);
@@ -718,10 +759,10 @@ function styleWiresByCurrent(sim){
     const t = Math.min(1, avg / maxI);
 
     const minW = 2, maxW = 10;
-    const width = minW + t * (maxW - minW);
-    poly.setAttribute('stroke-width', width);
+    const widthPx = minW + t * (maxW - minW); // desired screen px
+    poly.setAttribute('stroke-width', (widthPx * invScale).toString());
 
-    // gradient: blue → red with current magnitude
+    // gradient from blue (low) to red (high)
     const r = Math.round(127 + t * 128);
     const g = Math.round(180 - t * 180);
     const b = Math.round(255 - t * 255);
@@ -729,12 +770,10 @@ function styleWiresByCurrent(sim){
   });
 }
 
-
-
 /* =========================
-   Draw node voltage labels directly on canvas
+   Draw node voltage labels directly on canvas (compensated fonts)
    ========================= */
-function drawNodeLabels(sim){
+function drawNodeLabels(sim, invScale = 1){
   if(!sim) return;
   const { nodeV, uniqRaw, coordToRaw, rawToIndex, groundRaw } = sim;
   if(!nodeV) return;
@@ -754,10 +793,12 @@ function drawNodeLabels(sim){
     txt.setAttribute('x', x+6);
     txt.setAttribute('y', y-6);
     txt.setAttribute('class','voltage-text');
+    txt.setAttribute('font-size', (11 * invScale).toString());
     txt.textContent = `${nodeV[i].toFixed(2)}V`;
     viewport.appendChild(txt);
   });
 }
+
 /* =========================
    Helpers: edit / delete / export
    ========================= */
