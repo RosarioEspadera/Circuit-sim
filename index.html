@@ -685,31 +685,45 @@ function updateNodeList(nodeV, uniqRaw){
 function styleWiresByCurrent(sim){
   if(!sim) return;
   const { nodeCurrentSum, rawToIndex, coordToRaw } = sim;
-  let max = 0; nodeCurrentSum.forEach(v=>{ if(v>max) max=v; }); max = Math.max(max, 1e-12);
+  if(!nodeCurrentSum || !rawToIndex || !coordToRaw) return;
+
+  // find max current for normalization
+  let max = 0;
+  nodeCurrentSum.forEach(v => { if(v > max) max = v; });
+  max = Math.max(max, 1e-12);
+
   function colorFor(t){
-    const c1=[122,162,255], c2=[255,85,85];
+    const c1=[122,162,255], c2=[16,185,129]; // blue -> green
     const r = Math.round(c1[0] + (c2[0]-c1[0])*t);
     const g = Math.round(c1[1] + (c2[1]-c1[1])*t);
     const b = Math.round(c1[2] + (c2[2]-c1[2])*t);
     return `rgb(${r},${g},${b})`;
   }
-  // style each polyline element
-  viewport.querySelectorAll('polyline.wire').forEach(poly=>{
-    const id = poly.dataset.id;
-    const w = state.wires.find(x=>x.id==id);
-    if(!w) return;
-    const firstKey = `${w.points[0].x},${w.points[0].y}`;
-    const raw = sim.coordToRaw.get(firstKey);
-    if(raw == null){ poly.setAttribute('stroke','#7aa2ff'); poly.setAttribute('stroke-width', 4); return; }
-    const idx = sim.rawToIndex[raw];
-    const sum = sim.nodeCurrentSum.get(idx) || 0;
-    const t = Math.min(1, sum / max);
-    const stroke = colorFor(t);
-    const strokeW = 2 + 8*t;
-    poly.setAttribute('stroke', stroke);
-    poly.setAttribute('stroke-width', strokeW.toFixed(2));
+
+  state.wires.forEach(w=>{
+    if(!w.points || w.points.length < 2) return;
+    const poly = viewport.querySelector(`polyline[data-id="${w.id}"]`);
+    if(!poly) return;
+
+    // measure average node current on its endpoints
+    let sum=0, cnt=0;
+    w.points.forEach(p=>{
+      const raw = coordToRaw.get(`${p.x},${p.y}`);
+      if(raw !== undefined){
+        const idx = rawToIndex[raw];
+        if(idx !== undefined){
+          sum += nodeCurrentSum.get(idx) || 0;
+          cnt++;
+        }
+      }
+    });
+    const I = cnt>0 ? sum/cnt : 0;
+    const t = Math.min(1, I/max);
+    poly.setAttribute("stroke-width", (2 + t*6).toFixed(1));
+    poly.setAttribute("stroke", colorFor(t));
   });
 }
+
 
 /* =========================
    Draw node voltage labels onto viewport
