@@ -3,55 +3,47 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>CircuitLab — Single-file DC MNA Editor</title>
+<title>CircuitLab — Full (DC + Zoom/Pan)</title>
 <style>
-  :root{
-    --bg:#071122;
-    --panel:#0b1220;
-    --muted:#94a3b8;
-    --accent:#10b981;
-    --hot:#ff8a4b;
-    --hot2:#ff4b4b;
-  }
-  *{box-sizing:border-box;user-select:none}
-  html,body{height:100%;margin:0;font-family:Inter,Segoe UI,Arial,system-ui;background:linear-gradient(180deg,#071022,#071826);color:#e6eef8}
-  .app{display:grid;grid-template-columns:260px 1fr 320px;grid-template-rows:56px 1fr;gap:8px;height:100vh;padding:8px}
-  header{grid-column:1/-1;background:rgba(255,255,255,0.02);border-radius:8px;padding:8px;display:flex;align-items:center;gap:8px}
-  header h1{font-size:15px;margin:0}
-  .toolbar{margin-left:auto;display:flex;gap:8px;align-items:center}
-  .btn{background:rgba(255,255,255,0.03);color:inherit;border:1px solid rgba(255,255,255,0.03);padding:6px 10px;border-radius:6px;cursor:pointer}
-  .btn:hover{background:rgba(255,255,255,0.04)}
-  .panel{background:rgba(255,255,255,0.02);border-radius:8px;padding:10px;box-shadow:0 6px 18px rgba(2,6,23,0.6)}
-  .left.panel{overflow:auto}
-  .palette .item{background:rgba(255,255,255,0.02);padding:8px;border-radius:8px;cursor:grab;display:flex;align-items:center;gap:8px;margin-bottom:8px}
-  .canvas-wrap{position:relative;border-radius:8px;overflow:hidden}
-  #canvas{width:100%;height:calc(100vh - 140px);display:block;cursor:crosshair;background:linear-gradient(90deg, rgba(255,255,255,0.01), transparent)}
-  .right.panel{display:flex;flex-direction:column;gap:10px}
-  .log{background:rgba(255,255,255,0.01);padding:8px;border-radius:8px;max-height:140px;overflow:auto;font-size:13px}
-  .net-label{font-size:12px;padding:2px 6px;border-radius:6px;background:rgba(16,185,129,0.12);color:var(--accent);display:inline-block;margin-bottom:6px}
-  .grid-line{stroke:rgba(255,255,255,0.04);stroke-width:1}
-  .wire{stroke:#7aa2ff;stroke-width:4;stroke-linecap:round;stroke-linejoin:round;fill:none;transition:stroke .12s linear, stroke-width .12s linear}
-  .handle{fill:var(--accent);cursor:pointer}
-  .component text{font-size:12px;fill:#dfefff;pointer-events:none}
-  .component rect{fill:rgba(255,255,255,0.02);stroke:rgba(255,255,255,0.04);rx:6}
-  .voltage-text{font-size:11px;fill:#fff;stroke:#000;stroke-width:.6px}
-  .wire-label{font-size:11px;fill:var(--accent);pointer-events:none}
+:root{
+  --bg:#071122; --panel:#0b1220; --muted:#94a3b8; --accent:#10b981; --hot:#ff8a4b; --hot2:#ff4b4b;
+}
+*{box-sizing:border-box;user-select:none}
+html,body{height:100%;margin:0;font-family:Inter,Segoe UI,Arial,system-ui;background:linear-gradient(180deg,#071022,#071826);color:#e6eef8}
+.app{display:grid;grid-template-columns:260px 1fr 320px;grid-template-rows:56px 1fr;gap:8px;height:100vh;padding:8px}
+header{grid-column:1/-1;background:rgba(255,255,255,0.02);border-radius:8px;padding:8px;display:flex;align-items:center;gap:8px}
+header h1{font-size:15px;margin:0}
+.toolbar{margin-left:auto;display:flex;gap:8px;align-items:center}
+.btn{background:rgba(255,255,255,0.03);color:inherit;border:1px solid rgba(255,255,255,0.03);padding:6px 10px;border-radius:6px;cursor:pointer}
+.panel{background:rgba(255,255,255,0.02);border-radius:8px;padding:10px;box-shadow:0 6px 18px rgba(2,6,23,0.6)}
+.left.panel{overflow:auto}
+.palette .item{background:rgba(255,255,255,0.02);padding:8px;border-radius:8px;cursor:grab;display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.canvas-wrap{position:relative;border-radius:8px;overflow:hidden}
+#canvas{width:100%;height:calc(100vh - 140px);display:block;cursor:move;background:linear-gradient(90deg, rgba(255,255,255,0.01), transparent)}
+.right.panel{display:flex;flex-direction:column;gap:10px}
+.log{background:rgba(255,255,255,0.01);padding:8px;border-radius:8px;max-height:140px;overflow:auto;font-size:13px}
+.net-label{font-size:12px;padding:2px 6px;border-radius:6px;background:rgba(16,185,129,0.12);color:var(--accent);display:inline-block;margin-bottom:6px}
+.grid-line{stroke:rgba(255,255,255,0.04);stroke-width:1}
+.wire{stroke:#7aa2ff;stroke-width:4;stroke-linecap:round;stroke-linejoin:round;fill:none;transition:stroke .12s linear, stroke-width .12s linear}
+.handle{fill:var(--accent);cursor:pointer}
+.component text{font-size:12px;fill:#dfefff;pointer-events:none}
+.voltage-text{font-size:11px;fill:#fff;stroke:#000;stroke-width:.6px;pointer-events:none}
+.wire-label{font-size:11px;fill:var(--accent);pointer-events:none}
+.small{font-size:11px;color:var(--muted)}
+kbd{background:#0b1220;border:1px solid rgba(255,255,255,0.03);padding:2px 6px;border-radius:4px}
 </style>
 </head>
 <body>
 <div class="app">
   <header class="panel">
-    <h1>CircuitLab — DC MNA Editor</h1>
+    <h1>CircuitLab — DC MNA Editor (zoom+pan)</h1>
     <div class="toolbar">
       <button id="newBtn" class="btn">New</button>
       <button id="undoBtn" class="btn">Undo</button>
       <button id="redoBtn" class="btn">Redo</button>
       <button id="exportJson" class="btn">Export JSON</button>
       <button id="exportSvg" class="btn">Export SVG</button>
-      <label style="display:flex;align-items:center;gap:6px">
-        Grid
-        <input id="gridToggle" type="checkbox" checked />
-      </label>
+      <label class="small" style="display:flex;align-items:center;gap:6px">Grid<input id="gridToggle" type="checkbox" checked/></label>
       <button id="runSim" class="btn">Run DC</button>
     </div>
   </header>
@@ -68,32 +60,39 @@
       <button id="toolSelect" class="btn">Select</button>
       <button id="toolWire" class="btn">Draw Wire</button>
     </div>
-    <small style="display:block;margin-top:8px;color:var(--muted)">Draw wire: click to place corners, double-click to finish. Drag components or wire handles to move. Double-click items to edit. Right-click to delete.</small>
+    <div style="margin-top:8px" class="small">
+      Draw wire: click to place corners, double-click to finish.  
+      Drag components / wire handles to move. Double-click to edit. Right-click to delete.  
+      Zoom: mouse wheel (clamped 0.25×–4×). Pan: middle-button drag or Space+drag.
+    </div>
   </aside>
 
   <main class="canvas-wrap panel">
-    <svg id="canvas" viewBox="0 0 1600 900" xmlns="http://www.w3.org/2000/svg"></svg>
+    <svg id="canvas" viewBox="0 0 1600 900" xmlns="http://www.w3.org/2000/svg">
+      <!-- viewport group transformed for pan/zoom -->
+      <g id="viewport"></g>
+    </svg>
   </main>
 
   <aside class="right panel">
     <div>
       <strong>Inspector</strong>
       <div style="margin-top:8px">
-        <div class="row" style="display:flex;gap:6px;align-items:center">
+        <div style="display:flex;gap:6px;align-items:center">
           <div style="width:80px;color:var(--muted)">Selected</div>
           <div id="selInfo">—</div>
         </div>
         <div style="margin-top:6px;display:flex;gap:6px">
-          <input id="selValue" placeholder="value" />
+          <input id="selValue" placeholder="value or label" />
           <button id="applyValue" class="btn">Apply</button>
         </div>
         <div style="margin-top:6px">
-          <button id="deleteSel" class="btn" style="background:#a02020">Delete</button>
+          <button id="deleteSel" class="btn" style="background:#9b2b2b">Delete</button>
         </div>
       </div>
     </div>
 
-    <div class="panel" style="padding:8px">
+    <div class="panel">
       <strong>Node Voltages</strong>
       <div id="netList" style="margin-top:8px"></div>
     </div>
@@ -106,22 +105,91 @@
 </div>
 
 <script>
-/* ---------- State ----------------------------------------------------------------- */
+/* =========================
+   State & Undo/Redo
+   ========================= */
 const GRID = 16;
 let state = { components: [], wires: [], nextId: 1, selection: null };
 let undoStack = [], redoStack = [];
 function uid(){ return (state.nextId++).toString(); }
-function snapshot(){ undoStack.push(JSON.stringify(state)); if(undoStack.length>200) undoStack.shift(); redoStack=[]; updateUndoButtons(); }
+function snapshot(){ undoStack.push(JSON.stringify(state)); if(undoStack.length>500) undoStack.shift(); redoStack=[]; updateUndoButtons(); }
 function updateUndoButtons(){ document.getElementById('undoBtn').disabled = undoStack.length===0; document.getElementById('redoBtn').disabled = redoStack.length===0; }
 function undo(){ if(!undoStack.length) return; redoStack.push(JSON.stringify(state)); state = JSON.parse(undoStack.pop()); render(); updateUndoButtons(); log('Undo'); }
 function redo(){ if(!redoStack.length) return; undoStack.push(JSON.stringify(state)); state = JSON.parse(redoStack.pop()); render(); updateUndoButtons(); log('Redo'); }
+function log(msg){ const e=document.getElementById('log'); const d=document.createElement('div'); d.textContent = `${new Date().toLocaleTimeString()}  —  ${msg}`; e.prepend(d); }
 
-function log(msg){ const e=document.getElementById('log'); const d=document.createElement('div'); d.textContent=msg; e.prepend(d); }
-
-/* ---------- Helpers ---------------------------------------------------------------- */
+/* =========================
+   Viewport transform (pan/zoom)
+   ========================= */
 const svg = document.getElementById('canvas');
-function snap(v){ return Math.round(v/GRID)*GRID; }
-function svgPoint(clientX, clientY){ const pt=svg.createSVGPoint(); pt.x=clientX; pt.y=clientY; return pt.matrixTransform(svg.getScreenCTM().inverse()); }
+const viewport = document.getElementById('viewport');
+let scale = 1.0;
+let tx = 0, ty = 0;
+const MIN_SCALE = 0.25, MAX_SCALE = 4.0;
+
+function applyTransform(){
+  viewport.setAttribute('transform', `translate(${tx},${ty}) scale(${scale})`);
+}
+applyTransform();
+
+function screenToWorld(clientX, clientY){
+  const rect = svg.getBoundingClientRect();
+  const sx = clientX - rect.left;
+  const sy = clientY - rect.top;
+  // world coords within svg units
+  return { x: (sx - tx) / scale, y: (sy - ty) / scale };
+}
+function worldToScreen(wx, wy){
+  const rect = svg.getBoundingClientRect();
+  const sx = wx*scale + tx;
+  const sy = wy*scale + ty;
+  return { x: sx + rect.left, y: sy + rect.top };
+}
+
+// wheel zoom centered on cursor
+svg.addEventListener('wheel', e=>{
+  if(e.ctrlKey) return; // allow browser ctrl-wheel default
+  e.preventDefault();
+  const rect = svg.getBoundingClientRect();
+  const mouse = { x: e.clientX, y: e.clientY };
+  const before = screenToWorld(mouse.x, mouse.y);
+  const factor = Math.exp(-e.deltaY * 0.0012); // smooth
+  let newScale = scale * factor;
+  newScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, newScale));
+  // adjust tx,ty so world point under cursor stays put
+  tx = mouse.x - before.x * newScale;
+  ty = mouse.y - before.y * newScale;
+  scale = newScale;
+  applyTransform(); render(); // re-render to keep strokes and sizes correct
+}, {passive:false});
+
+// panning: middle-button drag or Space+left-drag
+let panning = false, panStart = null;
+svg.addEventListener('mousedown', e=>{
+  if(e.button === 1 || e.button === 0 && e.shiftKey){ // middle-button or shift+left
+    panning = true;
+    panStart = { x: e.clientX, y: e.clientY, tx, ty };
+    document.addEventListener('mousemove', panMove);
+    document.addEventListener('mouseup', panEnd);
+    e.preventDefault();
+  }
+});
+function panMove(e){
+  if(!panning) return;
+  tx = panStart.tx + (e.clientX - panStart.x);
+  ty = panStart.ty + (e.clientY - panStart.y);
+  applyTransform();
+}
+function panEnd(e){
+  panning = false; panStart = null;
+  document.removeEventListener('mousemove', panMove);
+  document.removeEventListener('mouseup', panEnd);
+}
+
+/* =========================
+   Geometry helpers
+   ========================= */
+function snapCoord(x){ return Math.round(x/GRID) * GRID; }
 function getAllTerminals(){
   const t=[];
   state.components.forEach(c=>c.points.forEach(p=>t.push({x:p.x,y:p.y})));
@@ -129,436 +197,425 @@ function getAllTerminals(){
   return t;
 }
 function snapToTerminal(pt){
-  const D=12;
+  const D = 12;
   for(const t of getAllTerminals()){
-    const dx=pt.x-t.x, dy=pt.y-t.y;
+    const dx = pt.x - t.x, dy = pt.y - t.y;
     if(Math.hypot(dx,dy) < D) return {x:t.x,y:t.y};
   }
   return pt;
 }
-function createOrthogonalPoints(x1,y1,x2,y2){
-  const dx=Math.abs(x2-x1), dy=Math.abs(y2-y1);
-  return (dx>=dy) ? [{x:x1,y:y1},{x:x2,y:y1},{x:x2,y:y2}] : [{x:x1,y:y1},{x:x1,y:y2},{x:x2,y:y2}];
+function orthogonalRoute(p1, p2){
+  // returns array of points making an L or Z shaped route (simple)
+  const dx = Math.abs(p2.x - p1.x), dy = Math.abs(p2.y - p1.y);
+  if(dx === 0 || dy === 0) return [p1, p2];
+  // choose midpoint corner either (p2.x, p1.y) or (p1.x, p2.y)
+  return [p1, {x:p2.x, y:p1.y}, p2];
 }
 
-/* ---------- UI controls ----------------------------------------------------------- */
-document.getElementById('toolSelect').addEventListener('click',()=>{ currentTool='select'; log('Tool: select'); });
-document.getElementById('toolWire').addEventListener('click',()=>{ currentTool='draw-wire'; log('Tool: draw-wire'); });
-document.getElementById('applyValue').addEventListener('click', applyValue);
-document.getElementById('deleteSel').addEventListener('click', deleteSelection);
-document.getElementById('runSim').addEventListener('click', ()=>{ render(); log('DC solve complete'); });
-
-document.getElementById('exportJson').addEventListener('click', ()=>{
-  const data = JSON.stringify(state, null, 2);
-  const blob = new Blob([data], {type: 'application/json'});
-  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download='circuit.json'; a.click(); URL.revokeObjectURL(a.href);
-  log('Exported JSON');
-});
-document.getElementById('exportSvg').addEventListener('click', ()=>{
-  const clone = svg.cloneNode(true);
-  // remove handles for export
-  clone.querySelectorAll('.handle').forEach(e=>e.remove());
-  const s = new XMLSerializer().serializeToString(clone);
-  const blob = new Blob([s], {type: 'image/svg+xml'});
-  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download='circuit.svg'; a.click(); URL.revokeObjectURL(a.href);
-  log('Exported SVG');
-});
-document.getElementById('newBtn').addEventListener('click', ()=>{ snapshot(); state={components:[],wires:[],nextId:1,selection:null}; render(); log('New'); });
-
-/* ---------- Palette drag/drop ---------------------------------------------------- */
-document.querySelectorAll('.palette .item').forEach(it=>{
-  it.addEventListener('dragstart', e=> e.dataTransfer.setData('text/plain', it.dataset.type));
-});
-svg.addEventListener('dragover', e=> e.preventDefault());
-svg.addEventListener('drop', e=>{
-  e.preventDefault();
-  const type = e.dataTransfer.getData('text/plain');
-  const pt = svgPoint(e.clientX, e.clientY);
-  const gridOn = document.getElementById('gridToggle').checked;
-  const snapped = gridOn ? {x:snap(pt.x), y:snap(pt.y)} : snapToTerminal(pt);
-  addComponent(type, snapped.x, snapped.y);
-});
-
-/* ---------- Mode & preview ------------------------------------------------------- */
-let currentTool = 'select';
-let preview = {active:false, points:[]};
-
-/* ---------- Add components & wires ------------------------------------------------ */
+/* =========================
+   Add components / wires
+   ========================= */
 function addComponent(type, x, y){
   snapshot();
-  const id = uid();
   if(type === 'wire'){
-    const pts = createOrthogonalPoints(x,y,x+GRID*4,y);
-    state.wires.push({id, points: pts, label: ''});
+    const pts = orthogonalRoute({x,y}, {x:x+GRID*4, y});
+    state.wires.push({ id: uid(), points: pts, label: '' });
   } else {
-    const points = [{x:x-24,y},{x:x+24,y}];
-    const comp = {id, type, x, y, value: (type==='resistor'?1000:(type==='vsource'?5:0)), points};
+    const comp = { id: uid(), type, x, y, value: (type==='resistor'?1000:(type==='vsource'?5:0)), points:[{x:x-28,y},{x:x+28,y}] };
     if(type==='ground') comp.value = 0;
     state.components.push(comp);
   }
   render();
 }
 
-/* ---------- Render ---------------------------------------------------------------- */
-let draggingPoint = null, draggingWire = null, draggingComp = null, dragOffset = null;
+/* =========================
+   Rendering
+   ========================= */
+function clearViewport(){
+  while(viewport.firstChild) viewport.removeChild(viewport.firstChild);
+}
 
 function render(){
-  // clear
-  while(svg.firstChild) svg.removeChild(svg.firstChild);
-
-  // defs
-  const defs = document.createElementNS('http://www.w3.org/2000/svg','defs');
-  defs.innerHTML = `<marker id="dot" markerWidth="6" markerHeight="6" refX="3" refY="3"><circle cx="3" cy="3" r="2" fill="${getComputedStyle(document.documentElement).getPropertyValue('--accent')||'#10b981'}"/></marker>`;
-  svg.appendChild(defs);
-
-  // grid
+  clearViewport();
+  // grid (draw in viewport so it scales with zoom)
   if(document.getElementById('gridToggle').checked){
-    const w=1600,h=900;
-    for(let x=0;x<=w;x+=GRID){
-      const l=document.createElementNS('http://www.w3.org/2000/svg','line');
-      l.setAttribute('x1',x); l.setAttribute('y1',0); l.setAttribute('x2',x); l.setAttribute('y2',h); l.setAttribute('class','grid-line');
-      svg.appendChild(l);
+    const viewW = 1600, viewH = 900;
+    for(let x=0;x<=viewW;x+=GRID){
+      const l = document.createElementNS('http://www.w3.org/2000/svg','line');
+      l.setAttribute('x1', x); l.setAttribute('y1', 0); l.setAttribute('x2', x); l.setAttribute('y2', viewH);
+      l.setAttribute('class','grid-line'); viewport.appendChild(l);
     }
-    for(let y=0;y<=900;y+=GRID){
-      const l=document.createElementNS('http://www.w3.org/2000/svg','line');
-      l.setAttribute('x1',0); l.setAttribute('y1',y); l.setAttribute('x2',1600); l.setAttribute('y2',y); l.setAttribute('class','grid-line');
-      svg.appendChild(l);
+    for(let y=0;y<=viewH;y+=GRID){
+      const l = document.createElementNS('http://www.w3.org/2000/svg','line');
+      l.setAttribute('x1', 0); l.setAttribute('y1', y); l.setAttribute('x2', viewW); l.setAttribute('y2', y);
+      l.setAttribute('class','grid-line'); viewport.appendChild(l);
     }
   }
 
-  // draw wires (polylines) first
+  // draw wires first (polyline + handles)
   state.wires.forEach(w=>{
-    const p = document.createElementNS('http://www.w3.org/2000/svg','polyline');
-    p.setAttribute('points', w.points.map(pt=>`${pt.x},${pt.y}`).join(' '));
-    p.setAttribute('class','wire');
-    p.dataset.id = w.id;
-    p.addEventListener('dblclick', e=>{ e.stopPropagation(); editWireLabel(w); });
-    p.addEventListener('contextmenu', e=>{ e.preventDefault(); e.stopPropagation(); deleteWire(w.id); });
-    svg.appendChild(p);
+    const poly = document.createElementNS('http://www.w3.org/2000/svg','polyline');
+    poly.setAttribute('points', w.points.map(p=>`${p.x},${p.y}`).join(' '));
+    poly.setAttribute('class','wire');
+    poly.dataset.id = w.id;
+    poly.addEventListener('dblclick', e=>{ e.stopPropagation(); editWireLabel(w); });
+    poly.addEventListener('contextmenu', e=>{ e.preventDefault(); e.stopPropagation(); deleteWire(w.id); });
+    poly.addEventListener('mousedown', e=>{ e.stopPropagation(); /* selection handled below */ });
+    viewport.appendChild(poly);
 
-    // label if exists
+    // label
     if(w.label){
       const mid = w.points[Math.floor(w.points.length/2)];
       const t = document.createElementNS('http://www.w3.org/2000/svg','text');
       t.setAttribute('x', mid.x + 6); t.setAttribute('y', mid.y - 6);
       t.setAttribute('class','wire-label'); t.textContent = w.label;
-      svg.appendChild(t);
+      viewport.appendChild(t);
     }
 
-    // handles for each wire point
+    // handles for each point
     w.points.forEach((pt, idx)=>{
       const c = document.createElementNS('http://www.w3.org/2000/svg','circle');
-      c.setAttribute('cx',pt.x); c.setAttribute('cy',pt.y); c.setAttribute('r',5); c.setAttribute('class','handle');
-      c.dataset.wid = w.id; c.dataset.pti = idx;
+      c.setAttribute('cx', pt.x); c.setAttribute('cy', pt.y); c.setAttribute('r', 5); c.setAttribute('class','handle');
+      c.dataset.wid = w.id; c.dataset.idx = idx;
       c.addEventListener('mousedown', e=>{ e.stopPropagation(); startDragPoint(w, idx, e); });
-      c.addEventListener('dblclick', e=>{ e.stopPropagation(); // double-click handle to add a new corner after it
-        snapshot(); w.points.splice(idx+1,0,{x: pt.x + GRID*1.5, y: pt.y}); render();
-      });
+      c.addEventListener('dblclick', e=>{ e.stopPropagation(); snapshot(); w.points.splice(idx+1,0,{x:pt.x+GRID*1.5,y:pt.y}); render(); });
       c.addEventListener('contextmenu', e=>{ e.preventDefault(); e.stopPropagation(); deleteWire(w.id); });
-      svg.appendChild(c);
+      viewport.appendChild(c);
     });
   });
 
-  // draw components (g elements) on top
+  // draw components (g elements)
   state.components.forEach(c=>{
     const g = document.createElementNS('http://www.w3.org/2000/svg','g');
     g.setAttribute('transform', `translate(${c.x},${c.y})`);
     g.dataset.id = c.id;
-    g.classList.add('component');
 
-    // body (clickable rect for drag)
-    const body = document.createElementNS('http://www.w3.org/2000/svg','rect');
-    body.setAttribute('x', -36); body.setAttribute('y', -18); body.setAttribute('width', 72); body.setAttribute('height',36);
-    body.setAttribute('rx',6);
-    body.setAttribute('fill','rgba(255,255,255,0.02)'); body.setAttribute('stroke','rgba(255,255,255,0.04)');
-    body.style.cursor='move';
-    body.addEventListener('mousedown', e=>{ e.stopPropagation(); startDragComp(c, e); });
-    body.addEventListener('dblclick', e=>{ e.stopPropagation(); editCompValue(c); });
-    body.addEventListener('contextmenu', e=>{ e.preventDefault(); e.stopPropagation(); deleteComp(c.id); });
+    const rect = document.createElementNS('http://www.w3.org/2000/svg','rect');
+    rect.setAttribute('x', -36); rect.setAttribute('y', -18); rect.setAttribute('width', 72); rect.setAttribute('height', 36); rect.setAttribute('rx',6);
+    rect.setAttribute('fill','rgba(255,255,255,0.02)'); rect.setAttribute('stroke','rgba(255,255,255,0.04)');
+    rect.style.cursor = 'move';
+    rect.addEventListener('mousedown', e=>{ e.stopPropagation(); startDragComp(c, e); });
+    rect.addEventListener('dblclick', e=>{ e.stopPropagation(); editCompValue(c); });
+    rect.addEventListener('contextmenu', e=>{ e.preventDefault(); e.stopPropagation(); deleteComp(c.id); });
 
-    g.appendChild(body);
+    g.appendChild(rect);
 
-    // symbol and label
+    // symbol and text
     if(c.type === 'resistor'){
-      const zigPts=[[-28,0],[-20,-10],[-12,10],[-4,-10],[4,10],[12,-10],[20,0]];
+      const pts=[[-28,0],[-20,-10],[-12,10],[-4,-10],[4,10],[12,-10],[20,0]];
       const poly = document.createElementNS('http://www.w3.org/2000/svg','polyline');
-      poly.setAttribute('points', zigPts.map(p=>p.join(',')).join(' '));
+      poly.setAttribute('points', pts.map(p=>p.join(',')).join(' '));
       poly.setAttribute('stroke','#dfefff'); poly.setAttribute('fill','none'); poly.setAttribute('stroke-width',2);
       g.appendChild(poly);
       const txt = document.createElementNS('http://www.w3.org/2000/svg','text');
       txt.setAttribute('x',0); txt.setAttribute('y',-14); txt.setAttribute('text-anchor','middle'); txt.textContent = `${c.value}Ω`;
       g.appendChild(txt);
-    } else if(c.type === 'vsource'){
+    } else if(c.type==='vsource'){
       const txt = document.createElementNS('http://www.w3.org/2000/svg','text');
       txt.setAttribute('x',0); txt.setAttribute('y',22); txt.setAttribute('text-anchor','middle'); txt.textContent = `${c.value}V`;
       g.appendChild(txt);
-      const l1 = document.createElementNS('http://www.w3.org/2000/svg','line');
-      l1.setAttribute('x1',-10); l1.setAttribute('y1',-12); l1.setAttribute('x2',-10); l1.setAttribute('y2',12);
-      l1.setAttribute('stroke','#dfefff'); l1.setAttribute('stroke-width',2); g.appendChild(l1);
-      const l2 = document.createElementNS('http://www.w3.org/2000/svg','line');
-      l2.setAttribute('x1',10); l2.setAttribute('y1',-6); l2.setAttribute('x2',10); l2.setAttribute('y2',6);
-      l2.setAttribute('stroke','#dfefff'); l2.setAttribute('stroke-width',2); g.appendChild(l2);
-    } else if(c.type === 'ground'){
-      const l1 = document.createElementNS('http://www.w3.org/2000/svg','line');
-      l1.setAttribute('x1',0); l1.setAttribute('y1',0); l1.setAttribute('x2',0); l1.setAttribute('y2',8); l1.setAttribute('stroke','#dfefff'); g.appendChild(l1);
-      const l2 = document.createElementNS('http://www.w3.org/2000/svg','line');
-      l2.setAttribute('x1',-8); l2.setAttribute('y1',8); l2.setAttribute('x2',8); l2.setAttribute('y2',8); l2.setAttribute('stroke','#dfefff'); g.appendChild(l2);
-      const l3 = document.createElementNS('http://www.w3.org/2000/svg','line');
-      l3.setAttribute('x1',-5); l3.setAttribute('y1',10); l3.setAttribute('x2',5); l3.setAttribute('y2',10); l3.setAttribute('stroke','#dfefff'); g.appendChild(l3);
+      const l1 = document.createElementNS('http://www.w3.org/2000/svg','line'); l1.setAttribute('x1',-10); l1.setAttribute('y1',-12); l1.setAttribute('x2',-10); l1.setAttribute('y2',12); l1.setAttribute('stroke','#dfefff'); l1.setAttribute('stroke-width',2); g.appendChild(l1);
+      const l2 = document.createElementNS('http://www.w3.org/2000/svg','line'); l2.setAttribute('x1',10); l2.setAttribute('y1',-6); l2.setAttribute('x2',10); l2.setAttribute('y2',6); l2.setAttribute('stroke','#dfefff'); l2.setAttribute('stroke-width',2); g.appendChild(l2);
+    } else if(c.type==='ground'){
+      const l1 = document.createElementNS('http://www.w3.org/2000/svg','line'); l1.setAttribute('x1',0); l1.setAttribute('y1',0); l1.setAttribute('x2',0); l1.setAttribute('y2',8); l1.setAttribute('stroke','#dfefff'); g.appendChild(l1);
+      const l2 = document.createElementNS('http://www.w3.org/2000/svg','line'); l2.setAttribute('x1',-8); l2.setAttribute('y1',8); l2.setAttribute('x2',8); l2.setAttribute('y2',8); l2.setAttribute('stroke','#dfefff'); g.appendChild(l2);
+      const l3 = document.createElementNS('http://www.w3.org/2000/svg','line'); l3.setAttribute('x1',-5); l3.setAttribute('y1',10); l3.setAttribute('x2',5); l3.setAttribute('y2',10); l3.setAttribute('stroke','#dfefff'); g.appendChild(l3);
     }
 
-    // selection text + events handled on body
-    svg.appendChild(g);
+    viewport.appendChild(g);
 
-    // label anchors (terminals)
-    // compute two terminal points relative to c.x,c.y:
-    c.points = [{x:c.x-28, y:c.y}, {x:c.x+28, y:c.y}];
-    // draw terminal dots (for better snapping)
+    // update and draw terminals dots for snapping & solver
+    c.points = [{x: c.x - 28, y: c.y}, {x: c.x + 28, y: c.y}];
     c.points.forEach(pt=>{
-      const d = document.createElementNS('http://www.w3.org/2000/svg','circle');
-      d.setAttribute('cx', pt.x); d.setAttribute('cy',pt.y); d.setAttribute('r',3); d.setAttribute('fill','#a8d8c2');
-      svg.appendChild(d);
+      const dot = document.createElementNS('http://www.w3.org/2000/svg','circle');
+      dot.setAttribute('cx', pt.x); dot.setAttribute('cy', pt.y); dot.setAttribute('r', 3); dot.setAttribute('fill','#a8d8c2');
+      viewport.appendChild(dot);
     });
   });
 
-  // After drawing all shapes, run solver and style
+  // solve and style
   const sim = computeAndShowNets();
   styleWiresByCurrent(sim);
   drawNodeLabels(sim);
 }
 
-/* ---------- Dragging --------------------------------------------------------------- */
-
+/* =========================
+   Dragging components & wire points (in world coordinates)
+   ========================= */
 function startDragComp(comp, e){
-  draggingComp = comp;
-  dragOffset = { dx: e.offsetX - comp.x, dy: e.offsetY - comp.y };
-  const move = (ev)=>{ const pt = svgPoint(ev.clientX, ev.clientY); comp.x = document.getElementById('gridToggle').checked ? snap(pt.x - dragOffset.dx + comp.x) : pt.x; comp.y = document.getElementById('gridToggle').checked ? snap(pt.y - dragOffset.dy + comp.y) : pt.y; render(); };
-  const up = ()=>{ snapshot(); document.removeEventListener('mousemove', move); document.removeEventListener('mouseup', up); draggingComp=null; log('Moved component'); };
+  const startMouse = {x: e.clientX, y: e.clientY};
+  const startPos = {x: comp.x, y: comp.y};
+  function move(ev){
+    ev.preventDefault();
+    const world = screenToWorld(ev.clientX, ev.clientY);
+    const gridOn = document.getElementById('gridToggle').checked;
+    comp.x = gridOn ? snapCoord(world.x) : world.x;
+    comp.y = gridOn ? snapCoord(world.y) : world.y;
+    render();
+  }
+  function up(ev){
+    document.removeEventListener('mousemove', move);
+    document.removeEventListener('mouseup', up);
+    snapshot(); log('Moved component');
+  }
   document.addEventListener('mousemove', move);
   document.addEventListener('mouseup', up);
 }
 
 function startDragPoint(wire, idx, e){
-  draggingPoint = {wire, idx};
-  const move = (ev)=>{ const pt = svgPoint(ev.clientX, ev.clientY); const snapped = document.getElementById('gridToggle').checked ? {x:snap(pt.x), y:snap(pt.y)} : snapToTerminal(pt); wire.points[idx] = snapped; render(); };
-  const up = ()=>{ snapshot(); document.removeEventListener('mousemove', move); document.removeEventListener('mouseup', up); draggingPoint=null; log('Moved wire point'); };
+  function move(ev){
+    ev.preventDefault();
+    const world = screenToWorld(ev.clientX, ev.clientY);
+    const gridOn = document.getElementById('gridToggle').checked;
+    const snapped = gridOn ? {x: snapCoord(world.x), y: snapCoord(world.y)} : snapToTerminal(world);
+    wire.points[idx] = snapped;
+    // optionally collapse colinear points
+    render();
+  }
+  function up(ev){
+    document.removeEventListener('mousemove', move);
+    document.removeEventListener('mouseup', up);
+    snapshot(); log('Moved wire handle');
+  }
   document.addEventListener('mousemove', move);
   document.addEventListener('mouseup', up);
 }
 
-/* ---------- Edit & Delete --------------------------------------------------------- */
-
+/* =========================
+   Edit / Delete
+   ========================= */
 function editCompValue(comp){
-  const v = prompt('Value (Ω or V):', comp.value);
-  if(v!==null){ snapshot(); comp.value = parseFloat(v) || comp.value; render(); log(`Edited ${comp.type} value`); }
+  const v = prompt('Value (Ω for resistor, V for vsource):', comp.value);
+  if(v !== null){ snapshot(); comp.value = parseFloat(v) || comp.value; render(); log('Edited component value'); }
 }
 function editWireLabel(wire){
-  const v = prompt('Wire label / net name (optional):', wire.label||'');
-  if(v!==null){ snapshot(); wire.label = v; render(); log('Edited wire label'); }
+  const v = prompt('Wire label / net name (optional):', wire.label || '');
+  if(v !== null){ snapshot(); wire.label = v; render(); log('Edited wire label'); }
 }
-function deleteComp(id){
-  snapshot(); state.components = state.components.filter(c=>c.id !== id); state.selection=null; render(); log('Deleted component'); }
-function deleteWire(id){
-  snapshot(); state.wires = state.wires.filter(w=>w.id !== id); state.selection=null; render(); log('Deleted wire'); }
+function deleteComp(id){ snapshot(); state.components = state.components.filter(c=>c.id !== id); if(state.selection && state.selection.id==id) state.selection = null; render(); log('Deleted component'); }
+function deleteWire(id){ snapshot(); state.wires = state.wires.filter(w=>w.id !== id); if(state.selection && state.selection.id==id) state.selection = null; render(); log('Deleted wire'); }
 
-/* ---------- Click to draw wires (multi-segment Manhattan) ------------------------- */
+/* =========================
+   Click selection & inspector
+   ========================= */
+svg.addEventListener('mousedown', e=>{
+  // ignore if panning (handled elsewhere)
+  if(e.button === 1) return;
+  const world = screenToWorld(e.clientX, e.clientY);
+  // hit test wires (polyline bounding)
+  let hitWire = null;
+  state.wires.forEach(w=>{
+    for(let i=0;i<w.points.length-1;i++){
+      const a = w.points[i], b = w.points[i+1];
+      // distance from point to segment
+      const d = pointSegmentDistance(world, a, b);
+      if(d < 6){ hitWire = w; break; }
+    }
+  });
+  if(hitWire){
+    state.selection = {id: hitWire.id, type: 'wire'};
+    document.getElementById('selInfo').textContent = `wire ${hitWire.id}`;
+    document.getElementById('selValue').value = hitWire.label || '';
+    return;
+  }
+  // hit test components
+  let hitComp = null;
+  for(const c of state.components){
+    const dx = world.x - c.x, dy = world.y - c.y;
+    if(Math.abs(dx) <= 36 && Math.abs(dy) <= 18){ hitComp = c; break; }
+  }
+  if(hitComp){
+    state.selection = {id: hitComp.id, type: 'component'};
+    document.getElementById('selInfo').textContent = `${hitComp.type} ${hitComp.id}`;
+    document.getElementById('selValue').value = hitComp.value || '';
+  } else {
+    state.selection = null;
+    document.getElementById('selInfo').textContent = '—';
+    document.getElementById('selValue').value = '';
+  }
+});
+
+// helper distance point->segment
+function pointSegmentDistance(p, a, b){
+  const vx = b.x - a.x, vy = b.y - a.y;
+  const wx = p.x - a.x, wy = p.y - a.y;
+  const c1 = vx*wx + vy*wy;
+  if(c1 <= 0) return Math.hypot(p.x - a.x, p.y - a.y);
+  const c2 = vx*vx + vy*vy;
+  if(c2 <= c1) return Math.hypot(p.x - b.x, p.y - b.y);
+  const t = c1 / c2;
+  const projx = a.x + t*vx, projy = a.y + t*vy;
+  return Math.hypot(p.x - projx, p.y - projy);
+}
+
+/* inspector actions */
+document.getElementById('applyValue').addEventListener('click', ()=>{
+  const sel = state.selection;
+  if(!sel) return;
+  if(sel.type === 'component'){
+    const c = state.components.find(x=>x.id==sel.id);
+    if(c){ snapshot(); c.value = parseFloat(document.getElementById('selValue').value) || c.value; render(); log('Applied component value'); }
+  } else if(sel.type === 'wire'){
+    const w = state.wires.find(x=>x.id==sel.id);
+    if(w){ snapshot(); w.label = document.getElementById('selValue').value; render(); log('Applied wire label'); }
+  }
+});
+document.getElementById('deleteSel').addEventListener('click', ()=>{
+  const sel = state.selection;
+  if(!sel) return;
+  if(sel.type === 'component') deleteComp(sel.id);
+  else if(sel.type === 'wire') deleteWire(sel.id);
+  document.getElementById('selInfo').textContent = '—';
+  document.getElementById('selValue').value = '';
+});
+
+/* right-click prevention & delete via context on element handled in element listeners */
+svg.addEventListener('contextmenu', e=> e.preventDefault());
+
+/* keyboard shortcuts */
+window.addEventListener('keydown', e=>{
+  if((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==='z'){ e.preventDefault(); undo(); }
+  if((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==='y'){ e.preventDefault(); redo(); }
+  if(e.key === 'Delete' && state.selection){ if(state.selection.type === 'component') deleteComp(state.selection.id); else deleteWire(state.selection.id); render(); }
+});
+
+/* =========================
+   Wire drawing preview (multi-segment) 
+   - click for corners, double-click finish
+   ========================= */
+let currentTool = 'select';
+document.getElementById('toolSelect').addEventListener('click', ()=> { currentTool = 'select'; log('Tool: select'); });
+document.getElementById('toolWire').addEventListener('click', ()=> { currentTool = 'draw-wire'; log('Tool: draw-wire'); });
+
+let preview = { active: false, points: [] };
+
+svg.addEventListener('click', e=>{
+  if(currentTool !== 'draw-wire') return;
+  const world = screenToWorld(e.clientX, e.clientY);
+  const gridOn = document.getElementById('gridToggle').checked;
+  const pt = gridOn ? {x: snapCoord(world.x), y: snapCoord(world.y)} : snapToTerminal(world);
+  if(!preview.active){
+    preview.active = true; preview.points = [pt]; render(); drawPreview(); return;
+  }
+  // add corner(s)
+  const last = preview.points[preview.points.length - 1];
+  if(last.x === pt.x || last.y === pt.y){
+    preview.points.push(pt);
+  } else {
+    // add an L corner (choose horizontal-then-vertical)
+    preview.points.push({x: pt.x, y: last.y});
+    preview.points.push(pt);
+  }
+  render(); drawPreview();
+});
+
 svg.addEventListener('dblclick', e=>{
-  // finish preview if active
-  if(preview.active){
-    if(preview.points.length>=2){
+  if(currentTool === 'draw-wire' && preview.active){
+    if(preview.points.length >= 2){
       snapshot();
-      state.wires.push({id:uid(), points: preview.points.map(p=>({...p})), label: ''});
-      preview.active=false; preview.points=[];
-      render(); log('Added wire (finished)'); 
+      state.wires.push({ id: uid(), points: preview.points.map(p=>({x:p.x,y:p.y})), label:'' });
+      preview.active = false; preview.points = [];
+      render(); log('Added wire');
     } else {
-      preview.active=false; preview.points=[];
+      preview.active = false; preview.points = [];
       render();
     }
   }
 });
 
-svg.addEventListener('click', e=>{
-  const ptRaw = svgPoint(e.clientX, e.clientY);
-  const gridOn = document.getElementById('gridToggle').checked;
-  const pt = gridOn ? {x:snap(ptRaw.x), y:snap(ptRaw.y)} : snapToTerminal(ptRaw);
-
-  if(currentTool === 'draw-wire'){
-    if(!preview.active){
-      preview.active=true; preview.points=[pt];
-      render(); drawPreview(); return;
-    } else {
-      // add corner: compute orthogonal intermediate routing from last point to current
-      const last = preview.points[preview.points.length-1];
-      // insert Manhattan corner(s): add one corner that is either (last.x, pt.y) or (pt.x, last.y) choosing better
-      const dx = Math.abs(pt.x - last.x), dy = Math.abs(pt.y - last.y);
-      if(dx===0 || dy===0){
-        preview.points.push(pt);
-      } else {
-        // choose shorter Manhattan path: prefer horizontal then vertical
-        preview.points.push({x:pt.x, y:last.y});
-        preview.points.push(pt);
-      }
-      render(); drawPreview(); return;
-    }
-  }
-
-  // if not drawing wire: place component if a palette was dropped? (handled by dragdrop)
-});
-
-/* preview draw (temporary polyline) */
 function drawPreview(){
-  renderBase(); // render without preview overlay
+  // overlay preview polyline in viewport
   if(!preview.active) return;
   const poly = document.createElementNS('http://www.w3.org/2000/svg','polyline');
   poly.setAttribute('points', preview.points.map(p=>`${p.x},${p.y}`).join(' '));
   poly.setAttribute('class','wire');
-  poly.setAttribute('stroke','#7fb2ff'); poly.setAttribute('stroke-width',3); poly.setAttribute('stroke-dasharray','6 4');
-  svg.appendChild(poly);
-}
-
-/* quick base render for preview overlay: components and wires but no node labels etc. */
-function renderBase(){
-  while(svg.firstChild) svg.removeChild(svg.firstChild);
-  // grid
-  if(document.getElementById('gridToggle').checked){
-    const w=1600,h=900;
-    for(let x=0;x<=w;x+=GRID){ const l=document.createElementNS('http://www.w3.org/2000/svg','line'); l.setAttribute('x1',x); l.setAttribute('y1',0); l.setAttribute('x2',x); l.setAttribute('y2',h); l.setAttribute('class','grid-line'); svg.appendChild(l); }
-    for(let y=0;y<=900;y+=GRID){ const l=document.createElementNS('http://www.w3.org/2000/svg','line'); l.setAttribute('x1',0); l.setAttribute('y1',y); l.setAttribute('x2',1600); l.setAttribute('y2',y); l.setAttribute('class','grid-line'); svg.appendChild(l); }
-  }
-  // wires
-  state.wires.forEach(w=>{
-    const p = document.createElementNS('http://www.w3.org/2000/svg','polyline');
-    p.setAttribute('points', w.points.map(pt=>`${pt.x},${pt.y}`).join(' '));
-    p.setAttribute('class','wire');
-    svg.appendChild(p);
-    w.points.forEach(pt=>{
-      const c = document.createElementNS('http://www.w3.org/2000/svg','circle');
-      c.setAttribute('cx',pt.x); c.setAttribute('cy',pt.y); c.setAttribute('r',3); c.setAttribute('fill','#0d9488');
-      svg.appendChild(c);
-    });
-  });
-  // components
-  state.components.forEach(c=>{
-    const g = document.createElementNS('http://www.w3.org/2000/svg','g');
-    g.setAttribute('transform', `translate(${c.x},${c.y})`);
-    const rect = document.createElementNS('http://www.w3.org/2000/svg','rect');
-    rect.setAttribute('x', -36); rect.setAttribute('y', -18); rect.setAttribute('width',72); rect.setAttribute('height',36); rect.setAttribute('rx',6); rect.setAttribute('fill','rgba(255,255,255,0.02)');
-    svg.appendChild(g); g.appendChild(rect);
-    // labels
-    const t = document.createElementNS('http://www.w3.org/2000/svg','text');
-    t.setAttribute('x',0); t.setAttribute('y',4); t.setAttribute('text-anchor','middle'); t.textContent = (c.type==='resistor'?`R ${c.value}Ω`:(c.type==='vsource'?`V ${c.value}V`:c.type));
-    g.appendChild(t);
+  poly.setAttribute('stroke','#7fb2ff'); poly.setAttribute('stroke-width','3'); poly.setAttribute('stroke-dasharray','6 4');
+  viewport.appendChild(poly);
+  // draw small handles
+  preview.points.forEach(pt=>{
+    const c = document.createElementNS('http://www.w3.org/2000/svg','circle');
+    c.setAttribute('cx', pt.x); c.setAttribute('cy', pt.y); c.setAttribute('r', 3); c.setAttribute('fill','#6ee7b7');
+    viewport.appendChild(c);
   });
 }
 
-/* ---------- Solver (MNA for DC resistive + independent V sources) --------------- */
-
+/* =========================
+   Solver: MNA for DC resistors + independent voltage sources
+   ========================= */
 function computeAndShowNets(){
-  // Build mapping from coordinate key -> node id (raw)
-  const coordToNode = new Map();
-  let nodeRawCount = 0;
+  // map coordinate key -> raw node id
+  const coordToRaw = new Map();
+  let rawCount = 0;
   function key(pt){ return `${pt.x},${pt.y}`; }
-  function getRawNodeFromPoint(pt){
+  function getRaw(pt){
     const k = key(pt);
-    if(coordToNode.has(k)) return coordToNode.get(k);
-    const n = ++nodeRawCount;
-    coordToNode.set(k, n);
-    return n;
+    if(coordToRaw.has(k)) return coordToRaw.get(k);
+    const r = ++rawCount; coordToRaw.set(k, r); return r;
   }
 
-  // mark component pin points and wire points, and note ground points
+  // register all component pins and wire points
   state.components.forEach(c=>{
-    // update terminal points
-    c.points = [{x:c.x-28,y:c.y},{x:c.x+28,y:c.y}];
-    if(c.type === 'ground'){
-      // mark ground terminal as node 0 by giving it key 'gnd' mapping later
-      // we'll still register it here
-      getRawNodeFromPoint(c.points[0]);
-    } else {
-      c.points.forEach(p => getRawNodeFromPoint(p));
-    }
+    c.points = [{x: c.x - 28, y: c.y}, {x: c.x + 28, y: c.y}];
+    c.points.forEach(p=> getRaw(p));
   });
-  state.wires.forEach(w=>{
-    w.points.forEach(p => getRawNodeFromPoint(p));
-  });
+  state.wires.forEach(w=> w.points.forEach(p=> getRaw(p)));
 
-  // Merge nodes that are coincident across all points (already done by coordToNode)
-  // Build uniq list of raw node ids in insertion order (keys in map preserve insertion order)
-  const rawNodes = Array.from(coordToNode.values());
-  // We'll treat an explicitly placed ground component as ground: find a key with that coord.
-  // Determine which raw node id is ground (if any ground component exists)
+  // determine ground raw id (first declared ground component if present)
   let groundRaw = null;
-  state.components.forEach(c=>{
-    if(c.type==='ground'){
-      const k = key(c.points[0]);
-      groundRaw = coordToNode.get(k);
-    }
-  });
-  if(groundRaw === null){
-    // If no explicit ground, create a phantom ground at first coordinate (choose raw id 1)
-    groundRaw = rawNodes.length ? rawNodes[0] : 1;
+  for(const c of state.components){
+    if(c.type === 'ground'){ groundRaw = coordToRaw.get(key(c.points[0])); break; }
+  }
+  if(groundRaw === null && coordToRaw.size>0){
+    // if no ground placed, choose first raw id as ground (makes solver work)
+    groundRaw = Array.from(coordToRaw.values())[0];
   }
 
-  // Build uniq array of raw node IDs (they may be 1..nodeRawCount)
-  const uniqRaw = Array.from(new Set(rawNodes));
-  // Map raw node -> compact index 0..N-1
-  const rawToIdx = {};
-  uniqRaw.forEach((rn,i)=> rawToIdx[rn] = i);
+  // build uniq raw list and map to compact index
+  const uniqRaw = Array.from(new Set(coordToRaw.values()));
+  const rawToIndex = {}; uniqRaw.forEach((r,i)=> rawToIndex[r] = i);
   const N = uniqRaw.length;
-
-  // Prepare arrays for MNA
   const Vsrcs = state.components.filter(c=>c.type==='vsource');
   const Rlist = state.components.filter(c=>c.type==='resistor');
 
-  const nNodesExcludingGround = N - 1; // remove ground unknown
-  const size = Math.max(0, nNodesExcludingGround) + Vsrcs.length;
-  if(size <= 0){
-    // nothing to solve
-    updateNodeList([]); return {nodeV:[], map:coordToNode, rawToIdx, uniqRaw};
+  const nodesExclGround = N - 1;
+  const size = Math.max(0, nodesExclGround) + Vsrcs.length;
+  if(size <= 0){ updateNodeList([], uniqRaw); return { nodeV:[], uniqRaw, coordToRaw, rawToIndex }; }
+
+  // helpers
+  function compactIdxFromRaw(raw){
+    const idx = rawToIndex[raw];
+    if(raw === groundRaw) return -1;
+    return (idx < rawToIndex[groundRaw]) ? idx : idx - 1;
   }
 
-  // Initialize M and RHS
   const M = Array.from({length:size}, ()=> Array(size).fill(0));
   const RHS = Array(size).fill(0);
 
-  function compactIndexFromRaw(raw){
-    const idx = rawToIdx[raw];
-    if(idx === rawToIdx[groundRaw]) return -1; // ground
-    // compact index: indices before ground map directly, after ground shift by -1
-    return (idx < rawToIdx[groundRaw]) ? idx : (idx - 1);
-  }
-
   // stamp resistors
   Rlist.forEach(r=>{
-    // find raw node ids for resistor pins
-    const aRaw = coordToNode.get(key(r.points[0]));
-    const bRaw = coordToNode.get(key(r.points[1]));
-    const aIdx = compactIndexFromRaw(aRaw);
-    const bIdx = compactIndexFromRaw(bRaw);
+    const ar = coordToRaw.get(key(r.points[0])), br = coordToRaw.get(key(r.points[1]));
+    const a = compactIdxFromRaw(ar), b = compactIdxFromRaw(br);
     const g = 1 / Math.max(1e-12, Number(r.value));
-    if(aIdx !== -1) M[aIdx][aIdx] += g;
-    if(bIdx !== -1) M[bIdx][bIdx] += g;
-    if(aIdx !== -1 && bIdx !== -1){ M[aIdx][bIdx] -= g; M[bIdx][aIdx] -= g; }
+    if(a !== -1) M[a][a] += g;
+    if(b !== -1) M[b][b] += g;
+    if(a !== -1 && b !== -1){ M[a][b] -= g; M[b][a] -= g; }
   });
 
-  // stamp voltage sources
-  Vsrcs.forEach((v, vsI)=>{
-    const aRaw = coordToNode.get(key(v.points[0]));
-    const bRaw = coordToNode.get(key(v.points[1]));
-    const aIdx = compactIndexFromRaw(aRaw);
-    const bIdx = compactIndexFromRaw(bRaw);
-    const row = nNodesExcludingGround + vsI;
-    if(aIdx !== -1){ M[row][aIdx] = 1; M[aIdx][row] = 1; }
-    if(bIdx !== -1){ M[row][bIdx] = -1; M[bIdx][row] = -1; }
+  // stamp V sources
+  Vsrcs.forEach((v, vi)=>{
+    const ar = coordToRaw.get(key(v.points[0])), br = coordToRaw.get(key(v.points[1]));
+    const a = compactIdxFromRaw(ar), b = compactIdxFromRaw(br);
+    const row = nodesExclGround + vi;
+    if(a !== -1){ M[row][a] = 1; M[a][row] = 1; }
+    if(b !== -1){ M[row][b] = -1; M[b][row] = -1; }
     RHS[row] = Number(v.value) || 0;
   });
 
-  // Solve M x = RHS
-  function solveLinear(A, b){
-    const n = A.length;
-    const B = A.map((r,i)=>[...r, b[i]]);
+  // solve
+  function solve(A,b){
+    const n=A.length; const B=A.map((r,i)=>[...r, b[i]]);
     for(let i=0;i<n;i++){
-      let p=i; for(let k=i+1;k<n;k++) if(Math.abs(B[k][i]) > Math.abs(B[p][i])) p=k;
+      let p = i; for(let k=i+1;k<n;k++) if(Math.abs(B[k][i]) > Math.abs(B[p][i])) p=k;
       if(Math.abs(B[p][i]) < 1e-15) continue;
       [B[i], B[p]] = [B[p], B[i]];
       const pivot = B[i][i];
@@ -576,65 +633,59 @@ function computeAndShowNets(){
     return x;
   }
 
-  const sol = solveLinear(M, RHS); // length == size
-  // node voltages (including ground)
+  const sol = solve(M, RHS);
+  // reconstruct node voltages per uniqRaw order
   const nodeV = uniqRaw.map((raw, pos)=>{
     if(raw === groundRaw) return 0;
-    const compact = (pos < rawToIdx[groundRaw]) ? pos : pos - 1;
+    const compact = (pos < rawToIndex[groundRaw]) ? pos : pos - 1;
     return sol[compact] || 0;
   });
 
   // compute component currents (positive from pin0 -> pin1)
   const compCurrents = new Map();
   Rlist.forEach(r=>{
-    const aRaw = coordToNode.get(key(r.points[0]));
-    const bRaw = coordToNode.get(key(r.points[1]));
-    const vA = nodeV[ rawToIdx[aRaw] ] || 0;
-    const vB = nodeV[ rawToIdx[bRaw] ] || 0;
+    const ar = coordToRaw.get(key(r.points[0])), br = coordToRaw.get(key(r.points[1]));
+    const vA = nodeV[ rawToIndex[ar] ] || 0; const vB = nodeV[ rawToIndex[br] ] || 0;
     const i = (vA - vB) / Math.max(1e-12, Number(r.value));
     compCurrents.set(r.id, i);
   });
-  Vsrcs.forEach((v, i)=>{
-    const currentVar = sol[nNodesExcludingGround + i] || 0;
-    compCurrents.set(v.id, currentVar);
+  Vsrcs.forEach((v, i)=> {
+    const iVal = sol[nodesExclGround + i] || 0;
+    compCurrents.set(v.id, iVal);
   });
 
-  // Node current summary (sum of abs currents of components touching that raw node)
-  const nodeCurrentSum = new Map(); // compact index -> sum
+  // node current sum for styling: aggregate absolute currents touching each raw node
+  const nodeCurrentSum = new Map();
   state.components.forEach(c=>{
     const cur = Math.abs(compCurrents.get(c.id) || 0);
     c.points.forEach(p=>{
-      const raw = coordToNode.get(key(p));
-      const compact = rawToIdx[raw];
-      nodeCurrentSum.set(compact, (nodeCurrentSum.get(compact) || 0) + cur);
+      const raw = coordToRaw.get(key(p));
+      const idx = rawToIndex[raw];
+      nodeCurrentSum.set(idx, (nodeCurrentSum.get(idx) || 0) + cur);
     });
   });
 
-  // Update node voltages UI
   updateNodeList(nodeV, uniqRaw);
-
-  return {nodeV, uniqRaw, rawToIdx, coordToNode, nodeCurrentSum, compCurrents, groundRaw};
+  return { nodeV, uniqRaw, coordToRaw, rawToIndex, nodeCurrentSum, compCurrents, groundRaw };
 }
 
 function updateNodeList(nodeV, uniqRaw){
-  const netList = document.getElementById('netList');
-  netList.innerHTML = '';
-  if(!nodeV || nodeV.length===0){ netList.textContent = '(no nodes)'; return; }
+  const netList = document.getElementById('netList'); netList.innerHTML = '';
+  if(!nodeV || nodeV.length === 0){ netList.textContent = '(no nodes)'; return; }
   uniqRaw.forEach((raw, i)=>{
-    const d = document.createElement('div'); d.className='net-label';
+    const d = document.createElement('div'); d.className = 'net-label';
     d.textContent = `Node ${raw}: ${ (nodeV[i]||0).toFixed(3) } V`;
     netList.appendChild(d);
   });
 }
 
-/* ---------- Style wires based on current magnitude (no arrows) -------------------- */
-
+/* =========================
+   Styling wires by current (no arrows)
+   ========================= */
 function styleWiresByCurrent(sim){
   if(!sim) return;
-  const { nodeCurrentSum, uniqRaw, rawToIdx, coordToNode } = sim;
-  // find max for normalization
+  const { nodeCurrentSum, rawToIndex, coordToRaw } = sim;
   let max = 0; nodeCurrentSum.forEach(v=>{ if(v>max) max=v; }); max = Math.max(max, 1e-12);
-  // color scale from blue -> orange/red
   function colorFor(t){
     const c1=[122,162,255], c2=[255,85,85];
     const r = Math.round(c1[0] + (c2[0]-c1[0])*t);
@@ -642,123 +693,135 @@ function styleWiresByCurrent(sim){
     const b = Math.round(c1[2] + (c2[2]-c1[2])*t);
     return `rgb(${r},${g},${b})`;
   }
-
-  // style each wire by the node at its first point (approximate representation of net)
-  document.querySelectorAll('polyline.wire').forEach(poly=>{
+  // style each polyline element
+  viewport.querySelectorAll('polyline.wire').forEach(poly=>{
     const id = poly.dataset.id;
-    const wire = state.wires.find(w=>w.id==id);
-    if(!wire) return;
-    const firstKey = `${wire.points[0].x},${wire.points[0].y}`;
-    const raw = sim.coordToNode.get(firstKey);
-    if(raw == null){ poly.setAttribute('stroke','#7aa2ff'); poly.setAttribute('stroke-width','4'); return; }
-    const compIdx = sim.rawToIdx[raw];
-    const sum = sim.nodeCurrentSum.get(compIdx) || 0;
+    const w = state.wires.find(x=>x.id==id);
+    if(!w) return;
+    const firstKey = `${w.points[0].x},${w.points[0].y}`;
+    const raw = sim.coordToRaw.get(firstKey);
+    if(raw == null){ poly.setAttribute('stroke','#7aa2ff'); poly.setAttribute('stroke-width', 4); return; }
+    const idx = sim.rawToIndex[raw];
+    const sum = sim.nodeCurrentSum.get(idx) || 0;
     const t = Math.min(1, sum / max);
+    const stroke = colorFor(t);
     const strokeW = 2 + 8*t;
+    poly.setAttribute('stroke', stroke);
     poly.setAttribute('stroke-width', strokeW.toFixed(2));
-    poly.setAttribute('stroke', colorFor(t));
   });
 }
 
-/* ---------- Draw node labels (visual on canvas) ------------------------------- */
+/* =========================
+   Draw node voltage labels onto viewport
+   ========================= */
 function drawNodeLabels(sim){
   if(!sim) return;
-  const { uniqRaw, coordToNode, nodeV } = sim;
-  // for each unique raw node, draw text at first matching coordinate
+  const { uniqRaw, coordToRaw, nodeV } = sim;
   const drawn = new Set();
-  coordToNode.forEach((raw, key)=>{
+  coordToRaw.forEach((raw, coordKey)=>{
     if(drawn.has(raw)) return;
     drawn.add(raw);
-    const [x,y] = key.split(',').map(Number);
-    const tv = document.createElementNS('http://www.w3.org/2000/svg','text');
-    tv.setAttribute('x', x+6); tv.setAttribute('y', y-8); tv.setAttribute('class','voltage-text');
+    const [x,y] = coordKey.split(',').map(Number);
+    const t = document.createElementNS('http://www.w3.org/2000/svg','text');
+    t.setAttribute('x', x + 6); t.setAttribute('y', y - 8);
+    t.setAttribute('class','voltage-text');
     const idx = uniqRaw.indexOf(raw);
     const val = (nodeV && nodeV[idx] !== undefined) ? nodeV[idx].toFixed(3) + ' V' : '';
-    tv.textContent = val;
-    svg.appendChild(tv);
+    t.textContent = val;
+    viewport.appendChild(t);
   });
 }
 
-/* ---------- Selection UI & actions -------------------------------------------- */
-function applyValue(){
-  const sel = state.selection;
-  if(!sel) return;
-  const el = findComponentById(sel.id) || findWireById(sel.id);
-  if(!el) return;
-  const v = document.getElementById('selValue').value;
-  if(el.value !== undefined){
-    snapshot(); el.value = parseFloat(v) || el.value; render(); log('Applied value'); 
-  } else {
-    snapshot(); el.label = v; render(); log('Applied wire label');
-  }
-}
-function deleteSelection(){
-  const s = state.selection;
-  if(!s) return;
-  if(s.type === 'component') deleteComp(s.id);
-  if(s.type === 'wire') deleteWire(s.id);
-  state.selection = null; document.getElementById('selInfo').textContent = '—';
-}
+/* =========================
+   Helpers: edit / delete / export
+   ========================= */
+function editWireLabel(w){ const v = prompt('Wire label (optional):', w.label||''); if(v!==null){ snapshot(); w.label = v; render(); } }
+function editCompValue(c){ const v = prompt('Value (Ω or V):', c.value); if(v!==null){ snapshot(); c.value = parseFloat(v) || c.value; render(); } }
+function deleteComp(id){ snapshot(); state.components = state.components.filter(c=>c.id!==id); if(state.selection && state.selection.id==id) state.selection = null; render(); log('Deleted component'); }
+function deleteWire(id){ snapshot(); state.wires = state.wires.filter(w=>w.id!==id); if(state.selection && state.selection.id==id) state.selection = null; render(); log('Deleted wire'); }
 
-/* helper finders */
-function findComponentById(id){ return state.components.find(c=>c.id==id); }
-function findWireById(id){ return state.wires.find(w=>w.id==id); }
-
-/* ---------- click selection (click on polyline or component) ------------------- */
-svg.addEventListener('mousedown', e=>{
-  // identify clicked element via event target
-  const t = e.target;
-  if(t.tagName === 'polyline' && t.classList.contains('wire')){
-    const wid = t.dataset.id;
-    state.selection = {id: wid, type: 'wire'};
-    document.getElementById('selInfo').textContent = `wire ${wid}`;
-    const w = findWireById(wid);
-    document.getElementById('selValue').value = w.label || '';
-  } else {
-    // find nearest component by scanning components bounding box (approx)
-    let found = null;
-    for(const c of state.components){
-      const dx = e.offsetX - c.x, dy = e.offsetY - c.y;
-      if(Math.abs(dx)<=36 && Math.abs(dy)<=18){ found = c; break; }
-    }
-    if(found){
-      state.selection = {id: found.id, type: 'component'};
-      document.getElementById('selInfo').textContent = `${found.type} ${found.id}`;
-      document.getElementById('selValue').value = found.value || '';
-    } else {
-      state.selection = null;
-      document.getElementById('selInfo').textContent = '—';
-    }
-  }
+/* =========================
+   Drag & drop palette
+   ========================= */
+document.querySelectorAll('.palette .item').forEach(it=>{
+  it.addEventListener('dragstart', e => e.dataTransfer.setData('text/plain', it.dataset.type));
+});
+svg.addEventListener('dragover', e => e.preventDefault());
+svg.addEventListener('drop', e=>{
+  e.preventDefault();
+  const type = e.dataTransfer.getData('text/plain');
+  const world = screenToWorld(e.clientX, e.clientY);
+  const gridOn = document.getElementById('gridToggle').checked;
+  const pt = gridOn ? {x: snapCoord(world.x), y: snapCoord(world.y)} : snapToTerminal(world);
+  addComponent(type, pt.x, pt.y);
 });
 
-/* ---------- right-click global deletion for canvas empties -------------------- */
-svg.addEventListener('contextmenu', e=>{ e.preventDefault(); /* no-op to prevent context menu */ });
+/* =========================
+   Export functions (JSON/SVG)
+   ========================= */
+document.getElementById('exportJson').addEventListener('click', ()=>{
+  const blob = new Blob([JSON.stringify(state,null,2)], {type:'application/json'});
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download='circuit.json'; a.click(); URL.revokeObjectURL(a.href);
+  log('Exported JSON');
+});
+document.getElementById('exportSvg').addEventListener('click', ()=>{
+  // clone viewport and wrap in svg
+  const cloneSvg = document.createElementNS('http://www.w3.org/2000/svg','svg');
+  cloneSvg.setAttribute('viewBox', '0 0 1600 900');
+  cloneSvg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+  const clone = viewport.cloneNode(true);
+  // remove handles (class 'handle') from clone for cleaner export
+  clone.querySelectorAll('.handle').forEach(h=>h.remove());
+  cloneSvg.appendChild(clone);
+  const s = new XMLSerializer().serializeToString(cloneSvg);
+  const blob = new Blob([s], {type:'image/svg+xml'});
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download='circuit.svg'; a.click(); URL.revokeObjectURL(a.href);
+  log('Exported SVG');
+});
 
-/* ---------- keyboard shortcuts ---------------------------------------------- */
+/* =========================
+   Buttons & shortcuts
+   ========================= */
+document.getElementById('runSim').addEventListener('click', ()=>{ render(); log('DC solve complete'); });
+document.getElementById('undoBtn').addEventListener('click', undo);
+document.getElementById('redoBtn').addEventListener('click', redo);
+document.getElementById('newBtn').addEventListener('click', ()=>{ snapshot(); state = {components:[], wires:[], nextId:1, selection:null}; render(); log('New'); });
+
+// keyboard shortcuts
 window.addEventListener('keydown', e=>{
-  if((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==='z'){ e.preventDefault(); undo(); }
-  if((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==='y'){ e.preventDefault(); redo(); }
-  if(e.key === 'Delete' && state.selection){ deleteSelection(); render(); }
+  if((e.ctrlKey || e.metaKey) && e.key.toLowerCase()==='z'){ e.preventDefault(); undo(); }
+  if((e.ctrlKey || e.metaKey) && e.key.toLowerCase()==='y'){ e.preventDefault(); redo(); }
+  if(e.key === 'Delete' && state.selection){
+    if(state.selection.type === 'component') deleteComp(state.selection.id);
+    else deleteWire(state.selection.id);
+    render();
+  }
 });
 
-/* ---------- Initialization demo content ------------------------------------- */
-addSample();
-
+/* =========================
+   Demo content (initial)
+   ========================= */
 function addSample(){
   snapshot();
-  // Vsrc at (200,160), resistor at (420,160), ground at (640,160)
-  addComponent('vsource',200,160);
-  addComponent('resistor',420,160);
-  addComponent('ground',640,160);
-  // connecting wires (manhattan)
-  state.wires.push({id:uid(), points: createOrthogonalPoints(228,160,372,160), label:''});
-  state.wires.push({id:uid(), points: createOrthogonalPoints(448,160,640,160), label:''});
+  addComponent('vsource', 200, 160);
+  addComponent('resistor', 420, 160);
+  addComponent('ground', 640, 160);
+  // simple wires
+  state.wires.push({ id: uid(), points: orthogonalRoute({x:228,y:160},{x:372,y:160}), label:'' });
+  state.wires.push({ id: uid(), points: orthogonalRoute({x:448,y:160},{x:640,y:160}), label:'' });
   render();
   updateUndoButtons();
 }
+addSample();
 
-/* ---------- End of file ------------------------------------------------------ */
+/* =========================
+   Utilities
+   ========================= */
+function findComponentById(id){ return state.components.find(c=>c.id==id); }
+function findWireById(id){ return state.wires.find(w=>w.id==id); }
+function applyInspectorValue(){ const sel = state.selection; if(!sel) return; if(sel.type==='component'){ const c = findComponentById(sel.id); if(c){ snapshot(); c.value = parseFloat(document.getElementById('selValue').value) || c.value; render(); }} else { const w = findWireById(sel.id); if(w){ snapshot(); w.label = document.getElementById('selValue').value; render(); }}}
+document.getElementById('applyValue').addEventListener('click', applyInspectorValue);
+
 </script>
 </body>
 </html>
