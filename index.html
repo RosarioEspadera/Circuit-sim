@@ -24,7 +24,7 @@ header h1{font-size:15px;margin:0}
 .log{background:rgba(255,255,255,0.01);padding:8px;border-radius:8px;max-height:140px;overflow:auto;font-size:13px}
 .net-label{font-size:12px;padding:2px 6px;border-radius:6px;background:rgba(16,185,129,0.12);color:var(--accent);display:inline-block;margin-bottom:6px}
 .grid-line{stroke:rgba(255,255,255,0.04);stroke-width:1}
-.wire{stroke:#7aa2ff;stroke-width:4;stroke-linecap:round;stroke-linejoin:round;fill:none;transition:stroke .12s linear, stroke-width .12s linear}
+.wire{stroke:#7aa2ff;stroke-linecap:round;stroke-linejoin:round;fill:none;transition:stroke .12s linear, stroke-width .12s linear}
 .handle{fill:var(--accent);cursor:pointer}
 .component text{font-size:12px;fill:#dfefff;pointer-events:none}
 .voltage-text{font-size:11px;fill:#fff;stroke:#000;stroke-width:.6px;pointer-events:none}
@@ -45,6 +45,7 @@ kbd{background:#0b1220;border:1px solid rgba(255,255,255,0.03);padding:2px 6px;b
       <button id="exportSvg" class="btn">Export SVG</button>
       <label class="small" style="display:flex;align-items:center;gap:6px">Grid<input id="gridToggle" type="checkbox" checked/></label>
       <button id="runSim" class="btn">Run DC</button>
+      <button id="runNgspiceBtn" class="btn" title="Optional: send netlist to external/wasm ngspice">Run with NgSpice (WASM)</button>
     </div>
   </header>
 
@@ -136,41 +137,34 @@ function screenToWorld(clientX, clientY){
   const rect = svg.getBoundingClientRect();
   const sx = clientX - rect.left;
   const sy = clientY - rect.top;
-  // world coords within svg units
   return { x: (sx - tx) / scale, y: (sy - ty) / scale };
 }
 function worldToScreenClient(wx, wy){
-  // return client (window) coordinates of a world point
   const rect = svg.getBoundingClientRect();
   const sx = wx * scale + tx + rect.left;
   const sy = wy * scale + ty + rect.top;
   return { x: sx, y: sy };
 }
 function worldToScreen(wx, wy){
-  // return local svg coordinates (without adding rect offset)
   return { x: wx * scale + tx, y: wy * scale + ty };
 }
 
 /* === Wheel zoom centered on cursor === */
 svg.addEventListener('wheel', e=>{
-  if(e.ctrlKey) return; // allow browser ctrl-wheel default
+  if(e.ctrlKey) return;
   e.preventDefault();
-
   const rect = svg.getBoundingClientRect();
   const localX = e.clientX - rect.left;
   const localY = e.clientY - rect.top;
   const worldBefore = screenToWorld(e.clientX, e.clientY);
-
-  const factor = Math.exp(-e.deltaY * 0.0012); // smooth
+  const factor = Math.exp(-e.deltaY * 0.0012);
   let newScale = scale * factor;
   newScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, newScale));
-
-  // adjust tx,ty so world point under cursor stays put
   tx = localX - worldBefore.x * newScale;
   ty = localY - worldBefore.y * newScale;
   scale = newScale;
   applyTransform();
-  render(); // re-render to recompute compensated stroke-widths, handles, fonts
+  render();
 }, {passive:false});
 
 /* === Panning: middle-button drag or Shift+left-drag === */
@@ -202,8 +196,8 @@ function panEnd(e){
 function snapCoord(x){ return Math.round(x/GRID) * GRID; }
 function getAllTerminals(){
   const t=[];
-  state.components.forEach(c=>c.points.forEach(p=>t.push({x:p.x,y:p.y})));
-  state.wires.forEach(w=>w.points.forEach(p=>t.push({x:p.x,y:p.y})));
+  state.components.forEach(c=>c.points.forEach(p=>t.push({x:Math.round(p.x),y:Math.round(p.y)})));
+  state.wires.forEach(w=>w.points.forEach(p=>t.push({x:Math.round(p.x),y:Math.round(p.y)})));
   return t;
 }
 function snapToTerminal(pt){
@@ -215,10 +209,8 @@ function snapToTerminal(pt){
   return pt;
 }
 function orthogonalRoute(p1, p2){
-  // returns array of points making an L or Z shaped route (simple)
   const dx = Math.abs(p2.x - p1.x), dy = Math.abs(p2.y - p1.y);
   if(dx === 0 || dy === 0) return [p1, p2];
-  // choose midpoint corner either (p2.x, p1.y) or (p1.x, p2.y)
   return [p1, {x:p2.x, y:p1.y}, p2];
 }
 
@@ -239,19 +231,15 @@ function addComponent(type, x, y){
 }
 
 /* =========================
-   Rendering (with stroke/font/handle compensation)
+   Rendering (compensated for zoom)
    ========================= */
-function clearViewport(){
-  while(viewport.firstChild) viewport.removeChild(viewport.firstChild);
-}
+function clearViewport(){ while(viewport.firstChild) viewport.removeChild(viewport.firstChild); }
 
 function render(){
   clearViewport();
-
-  // compensation factor so strokes/handles/fonts remain constant on screen
   const invScale = 1 / scale;
 
-  // grid (draw in viewport so it scales with zoom)
+  // grid
   if(document.getElementById('gridToggle').checked){
     const viewW = 1600, viewH = 900;
     for(let x=0;x<=viewW;x+=GRID){
@@ -266,20 +254,18 @@ function render(){
     }
   }
 
-  // draw wires first (polyline + handles)
+  // wires
   state.wires.forEach(w=>{
     const poly = document.createElementNS('http://www.w3.org/2000/svg','polyline');
     poly.setAttribute('points', w.points.map(p=>`${p.x},${p.y}`).join(' '));
     poly.setAttribute('class','wire');
     poly.dataset.id = w.id;
-    // set stroke-width compensated (base 4 px)
     poly.setAttribute('stroke-width', (4 * invScale).toString());
     poly.addEventListener('dblclick', e=>{ e.stopPropagation(); editWireLabel(w); });
     poly.addEventListener('contextmenu', e=>{ e.preventDefault(); e.stopPropagation(); deleteWire(w.id); });
-    poly.addEventListener('mousedown', e=>{ e.stopPropagation(); /* selection handled below */ });
+    poly.addEventListener('mousedown', e=> e.stopPropagation());
     viewport.appendChild(poly);
 
-    // label
     if(w.label){
       const mid = w.points[Math.floor(w.points.length/2)];
       const t = document.createElementNS('http://www.w3.org/2000/svg','text');
@@ -290,7 +276,7 @@ function render(){
       viewport.appendChild(t);
     }
 
-    // handles for each point (small circle)
+    // handles
     w.points.forEach((pt, idx)=>{
       const c = document.createElementNS('http://www.w3.org/2000/svg','circle');
       c.setAttribute('cx', pt.x); c.setAttribute('cy', pt.y);
@@ -304,13 +290,12 @@ function render(){
     });
   });
 
-  // draw components (g elements)
+  // components
   state.components.forEach(c=>{
     const g = document.createElementNS('http://www.w3.org/2000/svg','g');
     g.setAttribute('transform', `translate(${c.x},${c.y})`);
     g.dataset.id = c.id;
 
-    // background rect (stroke also compensated)
     const rect = document.createElementNS('http://www.w3.org/2000/svg','rect');
     rect.setAttribute('x', -36); rect.setAttribute('y', -18); rect.setAttribute('width', 72); rect.setAttribute('height', 36); rect.setAttribute('rx',6);
     rect.setAttribute('fill','rgba(255,255,255,0.02)');
@@ -322,7 +307,6 @@ function render(){
     rect.addEventListener('contextmenu', e=>{ e.preventDefault(); e.stopPropagation(); deleteComp(c.id); });
     g.appendChild(rect);
 
-    // symbol and text (with stroke/font compensation)
     if(c.type === 'resistor'){
       const pts=[[-28,0],[-20,-10],[-12,10],[-4,-10],[4,10],[12,-10],[20,0]];
       const poly = document.createElementNS('http://www.w3.org/2000/svg','polyline');
@@ -332,8 +316,7 @@ function render(){
       g.appendChild(poly);
 
       const txt = document.createElementNS('http://www.w3.org/2000/svg','text');
-      txt.setAttribute('x',0); txt.setAttribute('y',-14);
-      txt.setAttribute('text-anchor','middle');
+      txt.setAttribute('x',0); txt.setAttribute('y',-14); txt.setAttribute('text-anchor','middle');
       txt.setAttribute('font-size', (12 * invScale).toString());
       txt.textContent = `${c.value}Ω`;
       g.appendChild(txt);
@@ -359,7 +342,7 @@ function render(){
 
     viewport.appendChild(g);
 
-    // update and draw terminals dots for snapping & solver (dot radius compensated)
+    // terminals dots
     c.points = [{x: c.x - 28, y: c.y}, {x: c.x + 28, y: c.y}];
     c.points.forEach(pt=>{
       const dot = document.createElementNS('http://www.w3.org/2000/svg','circle');
@@ -370,22 +353,16 @@ function render(){
     });
   });
 
-  // solve and style
+  // compute & style
   const sim = computeAndShowNets();
-
-  // style wires by current (stroke widths must be compensated)
-  styleWiresByCurrent(sim, invScale);
-
-  // draw node labels (font sizes compensated)
-  drawNodeLabels(sim, invScale);
+  styleWiresByCurrent(sim, 1/scale);
+  drawNodeLabels(sim, 1/scale);
 }
 
 /* =========================
-   Dragging components & wire points (in world coordinates)
+   Dragging components & wire points
    ========================= */
 function startDragComp(comp, e){
-  const startMouse = {x: e.clientX, y: e.clientY};
-  const startPos = {x: comp.x, y: comp.y};
   function move(ev){
     ev.preventDefault();
     const world = screenToWorld(ev.clientX, ev.clientY);
@@ -439,14 +416,13 @@ function deleteWire(id){ snapshot(); state.wires = state.wires.filter(w=>w.id !=
    Click selection & inspector
    ========================= */
 svg.addEventListener('mousedown', e=>{
-  // ignore if panning (handled elsewhere)
   if(e.button === 1) return;
 
-  // hit test wires (distance in SCREEN pixels converted to world units)
   const world = screenToWorld(e.clientX, e.clientY);
-  let hitWire = null;
-  // threshold in world units that corresponds to 6 screen pixels
+
+  // wire hit using world-threshold equivalent of 6 screen px
   const wireHitThresholdWorld = 6 / scale;
+  let hitWire = null;
   state.wires.forEach(w=>{
     for(let i=0;i<w.points.length-1;i++){
       const a = w.points[i], b = w.points[i+1];
@@ -461,11 +437,11 @@ svg.addEventListener('mousedown', e=>{
     return;
   }
 
-  // hit test components using SCREEN-space bounding box (so clicks are consistent at any zoom)
+  // component hit test in screen space
   let hitComp = null;
   for(const c of state.components){
     const sc = worldToScreenClient(c.x, c.y);
-    const halfWpx = 36 * scale; // rect half-width in screen pixels = world half-width * scale
+    const halfWpx = 36 * scale;
     const halfHpx = 18 * scale;
     if(Math.abs(e.clientX - sc.x) <= halfWpx && Math.abs(e.clientY - sc.y) <= halfHpx){ hitComp = c; break; }
   }
@@ -480,7 +456,6 @@ svg.addEventListener('mousedown', e=>{
   }
 });
 
-// helper distance point->segment (all in world coords)
 function pointSegmentDistance(p, a, b){
   const vx = b.x - a.x, vy = b.y - a.y;
   const wx = p.x - a.x, wy = p.y - a.y;
@@ -516,7 +491,6 @@ document.getElementById('deleteSel').addEventListener('click', ()=>{
 
 svg.addEventListener('contextmenu', e=> e.preventDefault());
 
-/* keyboard shortcuts */
 window.addEventListener('keydown', e=>{
   if((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==='z'){ e.preventDefault(); undo(); }
   if((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==='y'){ e.preventDefault(); redo(); }
@@ -524,8 +498,7 @@ window.addEventListener('keydown', e=>{
 });
 
 /* =========================
-   Wire drawing preview (multi-segment) 
-   - click for corners, double-click finish
+   Wire drawing preview
    ========================= */
 let currentTool = 'select';
 document.getElementById('toolSelect').addEventListener('click', ()=> { currentTool = 'select'; log('Tool: select'); });
@@ -541,12 +514,10 @@ svg.addEventListener('click', e=>{
   if(!preview.active){
     preview.active = true; preview.points = [pt]; render(); drawPreview(); return;
   }
-  // add corner(s)
   const last = preview.points[preview.points.length - 1];
   if(last.x === pt.x || last.y === pt.y){
     preview.points.push(pt);
   } else {
-    // add an L corner (choose horizontal-then-vertical)
     preview.points.push({x: pt.x, y: last.y});
     preview.points.push(pt);
   }
@@ -568,7 +539,6 @@ svg.addEventListener('dblclick', e=>{
 });
 
 function drawPreview(){
-  // overlay preview polyline in viewport
   if(!preview.active) return;
   const invScale = 1 / scale;
   const poly = document.createElementNS('http://www.w3.org/2000/svg','polyline');
@@ -578,7 +548,6 @@ function drawPreview(){
   poly.setAttribute('stroke-width', (3 * invScale).toString());
   poly.setAttribute('stroke-dasharray','6 4');
   viewport.appendChild(poly);
-  // draw small handles
   preview.points.forEach(pt=>{
     const c = document.createElementNS('http://www.w3.org/2000/svg','circle');
     c.setAttribute('cx', pt.x); c.setAttribute('cy', pt.y);
@@ -589,82 +558,106 @@ function drawPreview(){
 }
 
 /* =========================
-   Solver: MNA for DC resistors + independent voltage sources
+   MNA DC Solver (robust)
+   - Builds netlist-like map, forms MNA, solves
    ========================= */
 function computeAndShowNets(){
-  // map coordinate key -> raw node id
+  // Build mapping from coordinate keys -> node id
   const coordToRaw = new Map();
-  let rawCount = 0;
-  function key(pt){ return `${pt.x},${pt.y}`; }
-  function getRaw(pt){
+  let rawCounter = 0;
+  const key = (p) => `${Math.round(p.x)},${Math.round(p.y)}`;
+
+  function addCoord(pt){
     const k = key(pt);
-    if(coordToRaw.has(k)) return coordToRaw.get(k);
-    const r = ++rawCount; coordToRaw.set(k, r); return r;
+    if(!coordToRaw.has(k)) coordToRaw.set(k, ++rawCounter);
+    return coordToRaw.get(k);
   }
 
-  // register all component pins and wire points
+  // register pins and wires
   state.components.forEach(c=>{
     c.points = [{x: c.x - 28, y: c.y}, {x: c.x + 28, y: c.y}];
-    c.points.forEach(p=> getRaw(p));
+    c.points.forEach(p => addCoord(p));
   });
-  state.wires.forEach(w=> w.points.forEach(p=> getRaw(p)));
+  state.wires.forEach(w => w.points.forEach(p => addCoord(p)));
 
-  // determine ground raw id (first declared ground component if present)
+  // If no nodes, nothing to compute
+  if(coordToRaw.size === 0){ updateNodeList([], []); return { nodeV: [], uniqRaw: [], coordToRaw }; }
+
+  // Find ground node raw id
   let groundRaw = null;
   for(const c of state.components){
-    if(c.type === 'ground'){ groundRaw = coordToRaw.get(key(c.points[0])); break; }
+    if(c.type === 'ground'){
+      const r = coordToRaw.get(key(c.points[0]));
+      if(r) { groundRaw = r; break; }
+    }
   }
-  if(groundRaw === null && coordToRaw.size>0){
-    // if no ground placed, choose first raw id as ground (makes solver work)
+  if(groundRaw === null) {
+    // pick an arbitrary node as ground so MNA is solvable
     groundRaw = Array.from(coordToRaw.values())[0];
   }
 
-  // build uniq raw list and map to compact index
+  // Build uniq list and map to indices
   const uniqRaw = Array.from(new Set(coordToRaw.values()));
-  const rawToIndex = {}; uniqRaw.forEach((r,i)=> rawToIndex[r] = i);
+  const rawToIndex = {}; uniqRaw.forEach((r,i) => rawToIndex[r] = i);
   const N = uniqRaw.length;
-  const Vsrcs = state.components.filter(c=>c.type==='vsource');
-  const Rlist = state.components.filter(c=>c.type==='resistor');
 
-  const nodesExclGround = N - 1;
-  const size = Math.max(0, nodesExclGround) + Vsrcs.length;
-  if(size <= 0){ updateNodeList([], uniqRaw); return { nodeV:[], uniqRaw, coordToRaw, rawToIndex }; }
+  // Components categorized
+  const Rlist = state.components.filter(c => c.type === 'resistor');
+  const Vsrcs = state.components.filter(c => c.type === 'vsource');
 
-  // helpers
-  function compactIdxFromRaw(raw){
-    const idx = rawToIndex[raw];
-    if(raw === groundRaw) return -1;
-    return (idx < rawToIndex[groundRaw]) ? idx : idx - 1;
+  // MNA size: (N-1) node unknowns (exclude ground) + number of voltage sources
+  const nodeUnknowns = N - 1;
+  const M = nodeUnknowns + Vsrcs.length;
+  if(M <= 0){
+    // only single node, all zero
+    const nodeV = uniqRaw.map(r => (r===groundRaw? 0 : 0));
+    updateNodeList(nodeV, uniqRaw);
+    return { nodeV, uniqRaw, coordToRaw, rawToIndex, compCurrents: new Map() };
   }
 
-  const M = Array.from({length:size}, ()=> Array(size).fill(0));
-  const RHS = Array(size).fill(0);
+  // helpers to convert raw -> compact index in unknown vector
+  function compactIdx(raw){
+    if(raw === groundRaw) return -1;
+    const idx = rawToIndex[raw];
+    const groundIndex = rawToIndex[groundRaw];
+    return idx < groundIndex ? idx : idx - 1;
+  }
 
-  // stamp resistors
-  Rlist.forEach(r=>{
-    const ar = coordToRaw.get(key(r.points[0])), br = coordToRaw.get(key(r.points[1]));
-    const a = compactIdxFromRaw(ar), b = compactIdxFromRaw(br);
-    const g = 1 / Math.max(1e-12, Number(r.value));
-    if(a !== -1) M[a][a] += g;
-    if(b !== -1) M[b][b] += g;
-    if(a !== -1 && b !== -1){ M[a][b] -= g; M[b][a] -= g; }
+  // Initialize M and RHS
+  const A = Array.from({length:M}, ()=> Array(M).fill(0));
+  const b = Array(M).fill(0);
+
+  // stamp resistors into nodal submatrix
+  Rlist.forEach(r => {
+    const aRaw = coordToRaw.get(key(r.points[0]));
+    const bRaw = coordToRaw.get(key(r.points[1]));
+    const a = compactIdx(aRaw), bb = compactIdx(bRaw);
+    const G = 1 / Math.max(1e-12, Number(r.value));
+    if(a !== -1) A[a][a] += G;
+    if(bb !== -1) A[bb][bb] += G;
+    if(a !== -1 && bb !== -1){ A[a][bb] -= G; A[bb][a] -= G; }
   });
 
-  // stamp V sources
-  Vsrcs.forEach((v, vi)=>{
-    const ar = coordToRaw.get(key(v.points[0])), br = coordToRaw.get(key(v.points[1]));
-    const a = compactIdxFromRaw(ar), b = compactIdxFromRaw(br);
-    const row = nodesExclGround + vi;
-    if(a !== -1){ M[row][a] = 1; M[a][row] = 1; }
-    if(b !== -1){ M[row][b] = -1; M[b][row] = -1; }
-    RHS[row] = Number(v.value) || 0;
+  // stamp voltage sources: rows and cols for extra unknowns
+  Vsrcs.forEach((v, vi) => {
+    const aRaw = coordToRaw.get(key(v.points[0]));
+    const bRaw = coordToRaw.get(key(v.points[1]));
+    const a = compactIdx(aRaw), bb = compactIdx(bRaw);
+    const row = nodeUnknowns + vi;
+    if(a !== -1){ A[row][a] = 1; A[a][row] = 1; }
+    if(bb !== -1){ A[row][bb] = -1; A[bb][row] = -1; }
+    b[row] = Number(v.value) || 0;
   });
 
-  // solve
-  function solve(A,b){
-    const n=A.length; const B=A.map((r,i)=>[...r, b[i]]);
+  // Solve with Gaussian elimination (safe for small systems)
+  function solveLinear(mat, rhs){
+    const n = mat.length;
+    // augmented
+    const B = mat.map((r,i) => [...r, rhs[i]]);
     for(let i=0;i<n;i++){
-      let p = i; for(let k=i+1;k<n;k++) if(Math.abs(B[k][i]) > Math.abs(B[p][i])) p=k;
+      // pivot
+      let p = i;
+      for(let k=i+1;k<n;k++) if(Math.abs(B[k][i]) > Math.abs(B[p][i])) p = k;
       if(Math.abs(B[p][i]) < 1e-15) continue;
       [B[i], B[p]] = [B[p], B[i]];
       const pivot = B[i][i];
@@ -677,40 +670,44 @@ function computeAndShowNets(){
     for(let i=n-1;i>=0;i--){
       let s = B[i][n];
       for(let j=i+1;j<n;j++) s -= B[i][j] * x[j];
-      x[i] = (Math.abs(B[i][i]) < 1e-15) ? 0 : s / B[i][i];
+      x[i] = Math.abs(B[i][i]) < 1e-15 ? 0 : s / B[i][i];
     }
     return x;
   }
 
-  const sol = solve(M, RHS);
-  // reconstruct node voltages per uniqRaw order
-  const nodeV = uniqRaw.map((raw, pos)=>{
+  let sol = [];
+  if(M>0) sol = solveLinear(A, b);
+
+  // reconstruct node voltages for every uniqRaw (including ground)
+  const nodeV = uniqRaw.map((raw) => {
     if(raw === groundRaw) return 0;
-    const compact = (pos < rawToIndex[groundRaw]) ? pos : pos - 1;
-    return sol[compact] || 0;
+    const cidx = compactIdx(raw);
+    return (cidx >=0 && cidx < sol.length) ? sol[cidx] : 0;
   });
 
-  // compute component currents (positive from pin0 -> pin1)
+  // compute currents (positive from pin0 -> pin1)
   const compCurrents = new Map();
   Rlist.forEach(r=>{
-    const ar = coordToRaw.get(key(r.points[0])), br = coordToRaw.get(key(r.points[1]));
-    const vA = nodeV[ rawToIndex[ar] ] || 0; const vB = nodeV[ rawToIndex[br] ] || 0;
+    const aRaw = coordToRaw.get(key(r.points[0])), bRaw = coordToRaw.get(key(r.points[1]));
+    const vA = nodeV[ rawToIndex[aRaw] ] || 0;
+    const vB = nodeV[ rawToIndex[bRaw] ] || 0;
     const i = (vA - vB) / Math.max(1e-12, Number(r.value));
     compCurrents.set(r.id, i);
   });
-  Vsrcs.forEach((v, i)=> {
-    const iVal = sol[nodesExclGround + i] || 0;
+  Vsrcs.forEach((v, vi)=> {
+    // current through voltage source is in the extra unknowns part
+    const iVal = sol[nodeUnknowns + vi] || 0;
     compCurrents.set(v.id, iVal);
   });
 
-  // node current sum for styling: aggregate absolute currents touching each raw node
+  // nodeCurrentSum used for styling
   const nodeCurrentSum = new Map();
   state.components.forEach(c=>{
     const cur = Math.abs(compCurrents.get(c.id) || 0);
     c.points.forEach(p=>{
-      const raw = coordToRaw.get(key(p));
-      const idx = rawToIndex[raw];
-      nodeCurrentSum.set(idx, (nodeCurrentSum.get(idx) || 0) + cur);
+      const r = coordToRaw.get(key(p));
+      const idx = rawToIndex[r];
+      nodeCurrentSum.set(idx, (nodeCurrentSum.get(idx)||0) + cur);
     });
   });
 
@@ -729,27 +726,21 @@ function updateNodeList(nodeV, uniqRaw){
 }
 
 /* =========================
-   Styling wires by current (no arrows)
-   - Accepts invScale to compensate stroke width
+   Styling wires by current
    ========================= */
 function styleWiresByCurrent(sim, invScale = 1){
   if(!sim) return;
   const { nodeCurrentSum, rawToIndex, coordToRaw } = sim;
   if(!nodeCurrentSum || !rawToIndex || !coordToRaw) return;
-
-  // find max current magnitude
   let maxI = 0;
   nodeCurrentSum.forEach(v=>{ if(Math.abs(v) > maxI) maxI = Math.abs(v); });
-  if(maxI < 1e-12) maxI = 1e-12; // avoid divide by zero
-
-  // style each wire polyline
+  if(maxI < 1e-12) maxI = 1e-12;
   state.wires.forEach(w=>{
     const poly = viewport.querySelector(`polyline[data-id="${w.id}"]`);
     if(!poly) return;
-    // estimate current magnitude by averaging touching node currents
     let sum = 0;
     w.points.forEach(p=>{
-      const raw = coordToRaw.get(`${p.x},${p.y}`);
+      const raw = coordToRaw.get(`${Math.round(p.x)},${Math.round(p.y)}`);
       if(raw !== undefined){
         const idx = rawToIndex[raw];
         if(idx !== undefined) sum += Math.abs(nodeCurrentSum.get(idx) || 0);
@@ -757,12 +748,9 @@ function styleWiresByCurrent(sim, invScale = 1){
     });
     const avg = sum / Math.max(1, w.points.length);
     const t = Math.min(1, avg / maxI);
-
     const minW = 2, maxW = 10;
-    const widthPx = minW + t * (maxW - minW); // desired screen px
+    const widthPx = minW + t * (maxW - minW);
     poly.setAttribute('stroke-width', (widthPx * invScale).toString());
-
-    // gradient from blue (low) to red (high)
     const r = Math.round(127 + t * 128);
     const g = Math.round(180 - t * 180);
     const b = Math.round(255 - t * 255);
@@ -771,24 +759,18 @@ function styleWiresByCurrent(sim, invScale = 1){
 }
 
 /* =========================
-   Draw node voltage labels directly on canvas (compensated fonts)
+   Draw node voltage labels
    ========================= */
 function drawNodeLabels(sim, invScale = 1){
   if(!sim) return;
   const { nodeV, uniqRaw, coordToRaw, rawToIndex, groundRaw } = sim;
   if(!nodeV) return;
-
-  // draw a label at each unique raw node position (pick first matching coordinate)
   uniqRaw.forEach((raw, i)=>{
-    // skip ground (label would clutter)
     if(raw === groundRaw) return;
-
-    // find one coordinate that maps to this raw
     const coord = Array.from(coordToRaw.entries()).find(([k,v]) => v === raw);
     if(!coord) return;
     const [key,] = coord;
     const [x,y] = key.split(',').map(Number);
-
     const txt = document.createElementNS('http://www.w3.org/2000/svg','text');
     txt.setAttribute('x', x+6);
     txt.setAttribute('y', y-6);
@@ -800,31 +782,7 @@ function drawNodeLabels(sim, invScale = 1){
 }
 
 /* =========================
-   Helpers: edit / delete / export
-   ========================= */
-function editWireLabel(w){ const v = prompt('Wire label (optional):', w.label||''); if(v!==null){ snapshot(); w.label = v; render(); } }
-function editCompValue(c){ const v = prompt('Value (Ω or V):', c.value); if(v!==null){ snapshot(); c.value = parseFloat(v) || c.value; render(); } }
-function deleteComp(id){ snapshot(); state.components = state.components.filter(c=>c.id!==id); if(state.selection && state.selection.id==id) state.selection = null; render(); log('Deleted component'); }
-function deleteWire(id){ snapshot(); state.wires = state.wires.filter(w=>w.id!==id); if(state.selection && state.selection.id==id) state.selection = null; render(); log('Deleted wire'); }
-
-/* =========================
-   Drag & drop palette
-   ========================= */
-document.querySelectorAll('.palette .item').forEach(it=>{
-  it.addEventListener('dragstart', e => e.dataTransfer.setData('text/plain', it.dataset.type));
-});
-svg.addEventListener('dragover', e => e.preventDefault());
-svg.addEventListener('drop', e=>{
-  e.preventDefault();
-  const type = e.dataTransfer.getData('text/plain');
-  const world = screenToWorld(e.clientX, e.clientY);
-  const gridOn = document.getElementById('gridToggle').checked;
-  const pt = gridOn ? {x: snapCoord(world.x), y: snapCoord(world.y)} : snapToTerminal(world);
-  addComponent(type, pt.x, pt.y);
-});
-
-/* =========================
-   Export functions (JSON/SVG)
+   Export / demo / util
    ========================= */
 document.getElementById('exportJson').addEventListener('click', ()=>{
   const blob = new Blob([JSON.stringify(state,null,2)], {type:'application/json'});
@@ -832,12 +790,10 @@ document.getElementById('exportJson').addEventListener('click', ()=>{
   log('Exported JSON');
 });
 document.getElementById('exportSvg').addEventListener('click', ()=>{
-  // clone viewport and wrap in svg
   const cloneSvg = document.createElementNS('http://www.w3.org/2000/svg','svg');
   cloneSvg.setAttribute('viewBox', '0 0 1600 900');
   cloneSvg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
   const clone = viewport.cloneNode(true);
-  // remove handles (class 'handle') from clone for cleaner export
   clone.querySelectorAll('.handle').forEach(h=>h.remove());
   cloneSvg.appendChild(clone);
   const s = new XMLSerializer().serializeToString(cloneSvg);
@@ -854,7 +810,6 @@ document.getElementById('undoBtn').addEventListener('click', undo);
 document.getElementById('redoBtn').addEventListener('click', redo);
 document.getElementById('newBtn').addEventListener('click', ()=>{ snapshot(); state = {components:[], wires:[], nextId:1, selection:null}; render(); log('New'); });
 
-// keyboard shortcuts
 window.addEventListener('keydown', e=>{
   if((e.ctrlKey || e.metaKey) && e.key.toLowerCase()==='z'){ e.preventDefault(); undo(); }
   if((e.ctrlKey || e.metaKey) && e.key.toLowerCase()==='y'){ e.preventDefault(); redo(); }
@@ -865,15 +820,12 @@ window.addEventListener('keydown', e=>{
   }
 });
 
-/* =========================
-   Demo content (initial)
-   ========================= */
+/* Demo content */
 function addSample(){
   snapshot();
   addComponent('vsource', 200, 160);
   addComponent('resistor', 420, 160);
   addComponent('ground', 640, 160);
-  // simple wires
   state.wires.push({ id: uid(), points: orthogonalRoute({x:228,y:160},{x:372,y:160}), label:'' });
   state.wires.push({ id: uid(), points: orthogonalRoute({x:448,y:160},{x:640,y:160}), label:'' });
   render();
@@ -882,11 +834,101 @@ function addSample(){
 addSample();
 
 /* =========================
+   NgSpice (WASM) hook
+   - loadNgSpice(wasmUrl) should initialize the wasm engine
+   - runNgSpice(netlist) should call the wasm engine and return results
+   - Below are simple placeholders; to integrate, adapt to the specific ngspice-js API you use.
+   ========================= */
+
+let ngspiceReady = false;
+let ngspiceModule = null;
+// Example loader - adapt to the ngspice wasm build you have
+async function loadNgSpice(wasmUrl){
+  // Example: if using a library that exposes createNgspiceModule(...)
+  // ngspiceModule = await createNgspiceModule({ wasmBinaryFile: wasmUrl });
+  // ngspiceReady = true;
+  // log('NgSpice WASM loaded');
+  log('loadNgSpice called — please adapt loadNgSpice() to your ngspice-wasm build and call it with the wasm URL.');
+}
+
+// Example wrapper: convert current editor circuit to a SPICE netlist string
+function buildSpiceNetlist(){
+  // Simple netlist: node names are integers from MNA mapping
+  const sim = computeAndShowNets(); // also updates node list
+  // Build mapping coord->netname
+  const coordToRaw = sim.coordToRaw;
+  const rawToIndex = sim.rawToIndex;
+  const uniqRaw = sim.uniqRaw;
+  // Create node map: raw -> N<x> string
+  const nodeNames = {}; uniqRaw.forEach((raw,i)=> nodeNames[raw] = `N${raw}`);
+  // Compose lines
+  const lines = ['* Generated netlist'];
+  // Components: R<id> nodeA nodeB value
+  state.components.forEach(c=>{
+    if(c.type === 'resistor'){
+      const a = coordToRaw.get(`${Math.round(c.points[0].x)},${Math.round(c.points[0].y)}`);
+      const b = coordToRaw.get(`${Math.round(c.points[1].x)},${Math.round(c.points[1].y)}`);
+      lines.push(`R${c.id} ${nodeNames[a]} ${nodeNames[b]} ${Number(c.value)}`);
+    } else if(c.type === 'vsource'){
+      const a = coordToRaw.get(`${Math.round(c.points[0].x)},${Math.round(c.points[0].y)}`);
+      const b = coordToRaw.get(`${Math.round(c.points[1].x)},${Math.round(c.points[1].y)}`);
+      lines.push(`V${c.id} ${nodeNames[a]} ${nodeNames[b]} DC ${Number(c.value)}`);
+    } else if(c.type === 'ground'){
+      // ngspice expects ground named 0, we can map that node to 0 below
+      const a = coordToRaw.get(`${Math.round(c.points[0].x)},${Math.round(c.points[0].y)}`);
+      lines.push(`* ground node raw ${a}`);
+    }
+  });
+  // Add control to print node voltages
+  lines.push('.op');
+  lines.push('.end');
+  return lines.join('\n');
+}
+
+// Placeholder run function — adapt to your WASM API
+async function runNgSpice(netlist){
+  if(!ngspiceReady) { log('NgSpice not loaded'); return null; }
+  // Use ngspiceModule to run netlist and capture stdout/stderr results
+  // Example pseudo:
+  // const result = await ngspiceModule.run(netlist);
+  // parse result to extract node voltages and currents and return object similar to computeAndShowNets()
+  log('runNgSpice called — adapt runNgSpice() to your ngspice API.');
+  return null;
+}
+
+document.getElementById('runNgspiceBtn').addEventListener('click', async ()=>{
+  const netlist = buildSpiceNetlist();
+  log('Netlist built — see console for netlist');
+  console.log(netlist);
+  // Attempt to run ngspice if loaded
+  const res = await runNgSpice(netlist);
+  if(res) {
+    log('NgSpice run finished. (You provided a real ngspice-wasm implementation.)');
+    // Parse and map results into UI (not implemented in placeholder)
+  } else {
+    log('NgSpice not run — update loadNgSpice/runNgSpice to match your ngspice-wasm API.');
+  }
+});
+
+/* =========================
    Utilities
    ========================= */
+document.querySelectorAll('.palette .item').forEach(it=>{
+  it.addEventListener('dragstart', e => e.dataTransfer.setData('text/plain', it.dataset.type));
+});
+svg.addEventListener('dragover', e => e.preventDefault());
+svg.addEventListener('drop', e=>{
+  e.preventDefault();
+  const type = e.dataTransfer.getData('text/plain');
+  const world = screenToWorld(e.clientX, e.clientY);
+  const gridOn = document.getElementById('gridToggle').checked;
+  const pt = gridOn ? {x: snapCoord(world.x), y: snapCoord(world.y)} : snapToTerminal(world);
+  addComponent(type, pt.x, pt.y);
+});
+
 function findComponentById(id){ return state.components.find(c=>c.id==id); }
 function findWireById(id){ return state.wires.find(w=>w.id==id); }
-function applyInspectorValue(){ const sel = state.selection; if(!sel) return; if(sel.type==='component'){ const c = findComponentById(sel.id); if(c){ snapshot(); c.value = parseFloat(document.getElementById('selValue').value) || c.value; render(); }} else { const w = findWireById(sel.id); if(w){ snapshot(); w.label = document.getElementById('selValue').value; render(); }}}
+function applyInspectorValue(){ const sel = state.selection; if(!sel) return; if(sel.type==='component'){ const c = findComponentById(sel.id); if(c){ snapshot(); c.value = parseFloat(document.getElementById('selValue').value) || c.value; render(); }} else { const w = findWireById(sel.id); if(w){ snapshot(); w.label = document.getElementById('selValue').value; render(); } } }
 document.getElementById('applyValue').addEventListener('click', applyInspectorValue);
 
 </script>
