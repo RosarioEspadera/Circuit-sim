@@ -128,7 +128,10 @@ let tx = 0, ty = 0;
 const MIN_SCALE = 0.25, MAX_SCALE = 4.0;
 
 function applyTransform(){
-  viewport.setAttribute('transform', `translate(${tx},${ty}) scale(${scale})`);
+  viewport.setAttribute(
+    'transform',
+    `translate(${tx},${ty}) scale(${scale})`
+  );
 }
 applyTransform();
 
@@ -136,37 +139,39 @@ function screenToWorld(clientX, clientY){
   const rect = svg.getBoundingClientRect();
   const sx = clientX - rect.left;
   const sy = clientY - rect.top;
-  // world coords within svg units
   return { x: (sx - tx) / scale, y: (sy - ty) / scale };
 }
 function worldToScreen(wx, wy){
-  const rect = svg.getBoundingClientRect();
-  const sx = wx*scale + tx;
-  const sy = wy*scale + ty;
-  return { x: sx + rect.left, y: sy + rect.top };
+  return { x: wx * scale + tx, y: wy * scale + ty };
 }
 
-// wheel zoom centered on cursor
+// Wheel zoom centered on cursor
 svg.addEventListener('wheel', e=>{
-  if(e.ctrlKey) return; // allow browser ctrl-wheel default
+  if(e.ctrlKey) return; // keep browser ctrl+wheel
   e.preventDefault();
+
   const rect = svg.getBoundingClientRect();
-  const mouse = { x: e.clientX, y: e.clientY };
-  const before = screenToWorld(mouse.x, mouse.y);
-  const factor = Math.exp(-e.deltaY * 0.0012); // smooth
+  const localX = e.clientX - rect.left;
+  const localY = e.clientY - rect.top;
+  const worldBefore = screenToWorld(e.clientX, e.clientY);
+
+  const factor = Math.exp(-e.deltaY * 0.0012);
   let newScale = scale * factor;
   newScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, newScale));
-  // adjust tx,ty so world point under cursor stays put
-  tx = mouse.x - before.x * newScale;
-  ty = mouse.y - before.y * newScale;
+
+  // keep cursor world point fixed
+  tx = localX - worldBefore.x * newScale;
+  ty = localY - worldBefore.y * newScale;
+
   scale = newScale;
-  applyTransform(); render(); // re-render to keep strokes and sizes correct
+  applyTransform();
+  render(); // re-render wires/labels
 }, {passive:false});
 
-// panning: middle-button drag or Space+left-drag
+// Panning: middle-button drag or Shift+left-drag
 let panning = false, panStart = null;
 svg.addEventListener('mousedown', e=>{
-  if(e.button === 1 || e.button === 0 && e.shiftKey){ // middle-button or shift+left
+  if(e.button === 1 || (e.button === 0 && e.shiftKey)){
     panning = true;
     panStart = { x: e.clientX, y: e.clientY, tx, ty };
     document.addEventListener('mousemove', panMove);
@@ -180,11 +185,12 @@ function panMove(e){
   ty = panStart.ty + (e.clientY - panStart.y);
   applyTransform();
 }
-function panEnd(e){
-  panning = false; panStart = null;
+function panEnd(){
+  panning = false;
   document.removeEventListener('mousemove', panMove);
   document.removeEventListener('mouseup', panEnd);
 }
+
 
 /* =========================
    Geometry helpers
@@ -726,26 +732,32 @@ function styleWiresByCurrent(sim){
 
 
 /* =========================
-   Draw node voltage labels onto viewport
+   Draw node voltage labels directly on canvas
    ========================= */
 function drawNodeLabels(sim){
   if(!sim) return;
-  const { uniqRaw, coordToRaw, nodeV } = sim;
-  const drawn = new Set();
-  coordToRaw.forEach((raw, coordKey)=>{
-    if(drawn.has(raw)) return;
-    drawn.add(raw);
-    const [x,y] = coordKey.split(',').map(Number);
-    const t = document.createElementNS('http://www.w3.org/2000/svg','text');
-    t.setAttribute('x', x + 6); t.setAttribute('y', y - 8);
-    t.setAttribute('class','voltage-text');
-    const idx = uniqRaw.indexOf(raw);
-    const val = (nodeV && nodeV[idx] !== undefined) ? nodeV[idx].toFixed(3) + ' V' : '';
-    t.textContent = val;
-    viewport.appendChild(t);
+  const { nodeV, uniqRaw, coordToRaw, rawToIndex, groundRaw } = sim;
+  if(!nodeV) return;
+
+  // draw a label at each unique raw node position (pick first matching coordinate)
+  uniqRaw.forEach((raw, i)=>{
+    // skip ground (label would clutter)
+    if(raw === groundRaw) return;
+
+    // find one coordinate that maps to this raw
+    const coord = Array.from(coordToRaw.entries()).find(([k,v]) => v === raw);
+    if(!coord) return;
+    const [key,] = coord;
+    const [x,y] = key.split(',').map(Number);
+
+    const txt = document.createElementNS('http://www.w3.org/2000/svg','text');
+    txt.setAttribute('x', x+6);
+    txt.setAttribute('y', y-6);
+    txt.setAttribute('class','voltage-text');
+    txt.textContent = `${nodeV[i].toFixed(2)}V`;
+    viewport.appendChild(txt);
   });
 }
-
 /* =========================
    Helpers: edit / delete / export
    ========================= */
